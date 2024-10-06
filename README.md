@@ -22,11 +22,11 @@ Running `Enable-PIMRole` lists all the available and active Entra ID PIM roles f
 
 ![image-20241006172734455](assets/image-20241006172734455.png)
 
-Select one or more to activate them. (Currently deactivating isn't supported coz the only thing I really do is activate roles; and then deactivate on their own!)
+Press `SPACE` to select <u>one or more</u> entries to activate them. (Currently deactivating isn't supported coz the only thing I really do is activate roles; and then deactivate on their own!)
 
 ![image-20241006172840346](assets/image-20241006172840346.png)
 
-Press `ENTER`.
+Press `ENTER`. This is what starts the activation process. The previous step only selects the ones we wish to activate.
 
 Enter a reason or ticket number if the role requires it. 
 
