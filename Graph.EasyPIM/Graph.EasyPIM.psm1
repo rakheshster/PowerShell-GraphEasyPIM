@@ -303,7 +303,7 @@ function Enable-PIMRole {
 
         Write-Progress -Completed -Id 2
 
-        $userSelections = $roleStates | Out-ConsoleGridView
+        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of Entra ID PIM roles"
 
         # Lets ask for the required info upfront
         $justificationsHash = @{}
