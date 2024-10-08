@@ -1,7 +1,13 @@
 # Graph EasyPIM
 Something to make Entra ID PIM easier for end-users. 
 
-You can install the module [from PowerShell Gallery](https://www.powershellgallery.com/packages/Graph.EasyPIM/).
+You can install the module [from PowerShell Gallery](https://www.powershellgallery.com/packages/Graph.EasyPIM/). 
+
+```powershell
+Install-Module -Name Graph.EasyPIM
+```
+
+Not using PowerShell Gallery? Download the source code from this 👇 repo, or get started with PowerShell Gallery following the instructions [here](https://learn.microsoft.com/en-gb/powershell/gallery/getting-started?view=powershellget-3.x).
 
 Tested primarily on Windows with PowerShell 7.4, but I don't see any reason why it wouldn't work on macOS and Linux. It currently has the following cmdlets:
 
