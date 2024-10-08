@@ -94,7 +94,8 @@ function Enable-PIMRole {
 
             } else {
                 Write-Host "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
-                Write-Host "👉 You can re-run with -RefreshEligibleRoles to force a refresh."
+                Write-Host "👉 You can re-run with -RefreshEligibleRoles switch to force a refresh."
+                Write-Host ""
                 [array]$myEligibleRoles = $script:myEligibleRoles
             }
 
@@ -171,6 +172,8 @@ function Enable-PIMRole {
     process {
         $policyEnablementRulesCache = @{}
         $roleDefinitionsCache = @{}
+
+        $defaultJustification = "xxx"
 
         # I use these for showing progress
         [int]$counter = 0
@@ -395,8 +398,8 @@ function Enable-PIMRole {
 
         $rolesWereDisabled = $false
         foreach ($selection in $userSelections) {
-            if ($selection.Status -eq "Active") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+            if ($selection.Status -ne "Not Active") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👎  " -f $($selection.RoleName))
                 Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
@@ -430,15 +433,16 @@ function Enable-PIMRole {
             }
 
             Write-Progress -Completed
+            Write-Host ""
         }
 
         foreach ($selection in $userSelections) {
             if ($selection.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
 
                 if ($SkipJustification) {
-                    $justificationsHash[$($selection.RoleName)] = "xxx"
-                    Write-Host "Reason will be set to: xxx"
+                    $justificationsHash[$($selection.RoleName)] = "$defaultJustification"
+                    Write-Host "Reason will be set to: $defaultJustification"
 
                 } elseif ($Justification.Length -ne 0) {
                     $justificationsHash[$($selection.RoleName)] = $Justification
@@ -447,15 +451,15 @@ function Enable-PIMRole {
                 } else {
                     $justificationInput = Read-Host "Please provide a reason"
                 
-                    # If the justitication ends with an asterisk, use it for everything else that follows...
-                    if ($justificationInput -match '\*$') {
+                    # If the justitication ends with an asterisk or is empty, use it for everything else that follows...
+                    if ($justificationInput -match '\*$' -or $justificationInput.Length -eq 0) {
                         # First, remove the asterisk
                         $justificationInput = $justificationInput -replace '\*$',''
 
                         # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
-                        # If after removing the asterisk there's nothing, then set it to xxx for all. This is basically equivalent to -SkipJustification
+                        # If after removing the asterisk there's nothing, then set it to $defaultJustification for all. This is basically equivalent to -SkipJustification
                         if ($justificationInput.Length -eq 0) {
-                            $justificationInput = "xxx"
+                            $justificationInput = "$defaultJustification"
                             $justificationsHash[$($selection.RoleName)] = $justificationInput
                         }
                         
@@ -466,14 +470,11 @@ function Enable-PIMRole {
                     } else {
                         $justificationsHash[$($selection.RoleName)] = $justificationInput
                     }
-
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
-                    Write-Host "Reason will be set to: $justificationInput"
                 }
             }
 
             if ($selection.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
@@ -503,58 +504,53 @@ function Enable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👍  " -f $($selection.RoleName))
 
-            if ($selection.Status -ne "Not Active") {
-                Write-Host "Skipping as its status is '$($selection.Status)'"
+            Write-Host "Enabling for $($selection.MaxDuration)"
 
-            } else {
-                Write-Host "Enabling for $($selection.MaxDuration)"
+            $params = @{
+                Action = "selfActivate"
+                PrincipalId = $userId
+                RoleDefinitionId = $selection.More.RoleDefinitionId
+                DirectoryScopeId = $selection.More.DirectoryScopeId
 
-                $params = @{
-                    Action = "selfActivate"
-                    PrincipalId = $userId
-                    RoleDefinitionId = $selection.More.RoleDefinitionId
-                    DirectoryScopeId = $selection.More.DirectoryScopeId
-
-                    ScheduleInfo = @{
-                        StartDateTime = Get-Date
-                        Expiration = @{
-                            Type = "AfterDuration"
-                            Duration = $selection.More.MaxDuration
-                        }
+                ScheduleInfo = @{
+                    StartDateTime = Get-Date
+                    Expiration = @{
+                        Type = "AfterDuration"
+                        Duration = $selection.More.MaxDuration
                     }
                 }
+            }
 
-                if ($selection.More.EnablementRule -contains "Justification") {
-                    $params.Justification = $justificationsHash[$($selection.RoleName)]
+            if ($selection.More.EnablementRule -contains "Justification") {
+                $params.Justification = $justificationsHash[$($selection.RoleName)]
+            }
+
+            if ($selection.More.EnablementRule -contains "Ticketing") {
+                $params.TicketInfo = @{
+                    TicketNumber = $ticketNumberHash[$($selection.RoleName)]
+                    TicketSystem = $ticketSystemHash[$($selection.RoleName)]
                 }
+            }
 
-                if ($selection.More.EnablementRule -contains "Ticketing") {
-                    $params.TicketInfo = @{
-                        TicketNumber = $ticketNumberHash[$($selection.RoleName)]
-                        TicketSystem = $ticketSystemHash[$($selection.RoleName)]
-                    }
-                }
+            try {
+                $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
 
-                try {
-                    $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+                # Show the output to screen
 
-                    # Show the output to screen
-
-                    <#
-                    $requestObj | Select-Object -Property @{
-                        "Name" = "Role";
-                        "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
-                    },Status
-                    #>
-                
-                    # And add it to an array so we can loop over in the end
-                    $requestObjsArray += $requestObj
+                <#
+                $requestObj | Select-Object -Property @{
+                    "Name" = "Role";
+                    "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
+                },Status
+                #>
             
-                } catch {
-                    Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
-                }
+                # And add it to an array so we can loop over in the end
+                $requestObjsArray += $requestObj
+        
+            } catch {
+                Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
             }
         }
 
@@ -562,7 +558,7 @@ function Enable-PIMRole {
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
-                Write-Progress "⌚ Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
                 Start-Sleep -Seconds 1
                 $counter++
             }
@@ -711,7 +707,7 @@ function Disable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👎  " -f $($selection.RoleName))
             Write-Host "Disabling role"
 
             $params = @{
