@@ -61,6 +61,8 @@ function Enable-PIMRole {
             throw "Error fetching roles: $($_.Exception.Message)"
         }
 
+        Write-Progress -Completed
+
         # Create a cache of assignments. This is faster as I can lookup a bunch of them beforehand.
         $policyAssignmentHash = @{}
         # I must set scopeId to '/' coz if I search for a specific scopeId it errors: Attempted to perform an unauthorized operation.
@@ -125,6 +127,9 @@ function Enable-PIMRole {
 
         [array]$myActiveRoleIds = $myActiveRoles.RoleDefinitionId
 
+        # I use this for tidying up some of the output later
+        $longestRoleLength = 1
+
         $roleStates = foreach ($roleObj in $myEligibleRoles) {
             $counter++
             $percentageComplete = ($counter/$totalCount)*100
@@ -134,11 +139,15 @@ function Enable-PIMRole {
 
             $roleDefinitionsCache[$roleDefinitionId] = $roleName
 
+            if ($roleName.Length -gt $longestRoleLength) { $longestRoleLength = $roleName.Length }
+
             $timespanArray = @()
             $roleExpired = $false
             $roleAssignmentType = "Not Active"
 
             Write-Progress -Activity "Processing role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+
+            Write-Progress -Activity "Calculating role durations" -ParentId 2 -Id 3 -Status " "
 
             if ($roleDefinitionId -in $myActiveRoleIds) {
                 $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
@@ -211,6 +220,7 @@ function Enable-PIMRole {
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicy?view=graph-rest-1.0
             $policyId = $policyAssignment.PolicyId
 
+            Write-Progress -Id 3 -Completed
             Write-Progress -Activity "Fetching policy id '$(($policyId -split '_')[2])'" -ParentId 2 -Id 3
             try {
                 $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
@@ -310,10 +320,13 @@ function Enable-PIMRole {
         $ticketSystemHash = @{}
         $ticketNumberHash = @{}
 
+        # Add some padding to the longest length
+        $longestRoleLength = $longestRoleLength + 2
+
         foreach ($selection in $userSelections) {
             if ($selection.Status -eq "Not Active") {
                 if ($selection.More.EnablementRule -contains "Justification") {
-                    Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
 
                     if ($SkipJustification) {
                         $justificationsHash[$($selection.RoleName)] = "xxx"
@@ -324,7 +337,6 @@ function Enable-PIMRole {
                         Write-Host "Reason will be set to: $Justification"
 
                     } else {
-                        
                         $justificationInput = Read-Host "Please provide a reason"
                         
                         # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -335,9 +347,9 @@ function Enable-PIMRole {
 
                         # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
                         # If after removing the asterisk there's nothing, then set it to xyz for all. This is basically equivalent to -SkipJustification
-                        if ($justificationInput.Length -ne 0) {
+                        if ($justificationInput.Length -eq 0) {
                             $justificationsHash[$($selection.RoleName)] = "xxx"
-                            Write-Host "Reason will be set to: xxx"
+                            Write-Host "'$($selection.RoleName)' Reason will be set to: xxx"
                             $Justification = "xxx"
 
                         } else {
@@ -349,7 +361,7 @@ function Enable-PIMRole {
                 }
 
                 if ($selection.More.EnablementRule -contains "Ticketing") {
-                    Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
 
                     $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
@@ -369,13 +381,14 @@ function Enable-PIMRole {
                         $ticketSystemHash[$($selection.RoleName)] = $TicketingSystem
                     }
                 }
-
             }
         }
 
+        # An array to capture each of the items we action below
         $requestObjsArray = @()
+
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
 
             if ($selection.Status -ne "Not Active") {
                 Write-Host "Skipping as its status is '$($selection.Status)'"
@@ -428,6 +441,190 @@ function Enable-PIMRole {
                     Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
                 }
             }
+        }
+
+        if ($userSelections.Count -ne 0) {
+            $counter = 0
+            $maxWaitSecs = 20
+            while ($counter -lt $maxWaitSecs) {
+                Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Start-Sleep -Seconds 1
+                $counter++
+            }
+        }
+
+        $finalOutput = foreach ($requestObj in $requestObjsArray) {
+            Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -UnifiedRoleAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
+                "Name" = "Role";
+                "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
+            },Status 
+        }
+
+        $finalOutput | Format-Table
+    }
+}
+# This is a copy paste of Enable-PIMRole with some bits removed...
+function Disable-PIMRole {
+    begin {
+        $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
+
+        try {
+            Connect-MgGraph -Scopes $requiredScopesArray -NoWelcome -ErrorAction Stop
+
+        } catch {
+            throw "$($_.Exception.Message)"
+        }
+
+        $context = Get-MgContext
+
+        $scopes = $context.scopes
+
+        if ($scopes -notcontains "Directory.ReadWrite.All") {
+            foreach ($requiredScope in $requiredScopesArray) {
+                if ($requiredScope -notin $scopes) {
+                    Write-Warning "Required scope '$requiredScope' missing"
+                }
+            }
+        }
+
+        $userId = (Get-MgUser -UserId $context.Account).Id
+
+        try {
+            Write-Progress -Activity "Fetching all active Entra ID roles"
+            [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
+            
+        } catch {
+            throw "Error fetching roles: $($_.Exception.Message)"
+        }
+
+        Write-Progress -Completed
+    }
+
+    process {
+        $roleDefinitionsCache = @{}
+
+        # I use these for showing progress
+        [int]$counter = 0
+        [int]$totalCount = $myActiveRoles.Count
+
+        # I use this for tidying up some of the output later
+        $longestRoleLength = 1
+
+        $roleStates = foreach ($roleObj in $myActiveRoles) {
+            $counter++
+            $percentageComplete = ($counter/$totalCount)*100
+
+            $roleDefinitionId = $roleObj.RoleDefinitionId
+            $roleName = $roleObj.RoleDefinition.DisplayName
+
+            $roleDefinitionsCache[$roleDefinitionId] = $roleName
+
+            if ($roleName.Length -gt $longestRoleLength) { $longestRoleLength = $roleName.Length }
+
+            $timespanArray = @()
+            $roleExpired = $false
+            $roleAssignmentType = "Not Active"
+
+            Write-Progress -Activity "Processing role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+
+            Write-Progress -Activity "Calculating role durations" -ParentId 2 -Id 3
+
+            $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
+                
+            # Double checking coz during my testing I ran into instances where this was sometimes incomplete
+            if ($activeRoleObj.ScheduleInfo.Expiration.EndDateTime) {
+                $roleAssignmentType = $activeRoleObj.AssignmentType
+
+                $timeSpan = New-TimeSpan -Start (Get-Date).ToUniversalTime() -End $activeRoleObj.ScheduleInfo.Expiration.EndDateTime
+                if ($timeSpan.Days -gt 0) {
+                    if ($timeSpan.Days -eq 1) {
+                        $timespanArray += "$($timeSpan.Days) day"
+
+                    } else {
+                        $timespanArray += "$($timeSpan.Days) days"
+                    }
+                }
+
+                if ($timeSpan.Hours -gt 0) {
+                    if ($timeSpan.Hours -eq 1) {
+                        $timespanArray += "$($timeSpan.Hours) hour"
+
+                    } else {
+                        $timespanArray += "$($timeSpan.Hours) hours"
+                    }
+                }
+
+                if ($timeSpan.Minutes -gt 0) {
+                    if ($timeSpan.Minutes -eq 1) {
+                        $timespanArray += "$($timeSpan.Minutes) minute"
+
+                    } else {
+                        $timespanArray += "$($timeSpan.Minutes) minutes"
+                    }
+                }
+
+                # Just in case there's a delay between getting the states and when I calculate this...
+                if ($timeSpan.Ticks -lt 0) { 
+                    $roleExpired = $true 
+                }
+
+            } else {
+                $roleExpired = $true 
+            }
+
+            Write-Progress -Completed -Id 3 
+
+            [pscustomobject][ordered]@{
+                "RoleName" = $roleName
+                "Status" = $roleAssignmentType
+                "ExpiresIn" = if (!($roleExpired)) { $timespanArray -join ' ' }
+                "More" = [pscustomobject]@{
+                    "RoleDefinitionId" = $roleObj.RoleDefinitionId
+                    "DirectoryScopeId" = $roleObj.DirectoryScopeId
+                }
+            }
+        }
+
+        Write-Progress -Completed -Id 2
+
+        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
+
+        # Add some padding to the longest length
+        $longestRoleLength = $longestRoleLength + 2
+
+        # An array to capture each of the items we action below
+        $requestObjsArray = @()
+
+        foreach ($selection in $userSelections) {
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+            Write-Host "Disabling role"
+
+            $params = @{
+                Action = "selfDeactivate"
+                PrincipalId = $userId
+                RoleDefinitionId = $selection.More.RoleDefinitionId
+                DirectoryScopeId = $selection.More.DirectoryScopeId
+            }
+
+            try {
+                $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+
+                # Show the output to screen
+
+                <#
+                $requestObj | Select-Object -Property @{
+                    "Name" = "Role";
+                    "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
+                },Status
+                #>
+            
+                # And add it to an array so we can loop over in the end
+                $requestObjsArray += $requestObj
+        
+            } catch {
+                Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+            }
+        
         }
 
         if ($userSelections.Count -ne 0) {
