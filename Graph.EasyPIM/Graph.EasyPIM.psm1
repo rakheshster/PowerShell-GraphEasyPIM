@@ -73,7 +73,7 @@ function Enable-PIMRole {
                 } else {
                     $needsUpdating = $false
                     if ($lastUpdatedTimespan.TotalMinutes -eq 1) {
-                        $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minute"
+                        $minutes = "a minute"
 
                     } else {
                         $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minutes"
@@ -94,8 +94,7 @@ function Enable-PIMRole {
 
             } else {
                 Write-Host "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
-                Write-Host "👉 You can re-run with -RefreshEligibleRoles switch to force a refresh."
-                Write-Host ""
+                Write-Host "🫵 You can re-run with the -RefreshEligibleRoles switch to force a refresh."
                 [array]$myEligibleRoles = $script:myEligibleRoles
             }
 
@@ -170,6 +169,7 @@ function Enable-PIMRole {
     }
 
     process {
+        Write-Host ""
         $policyEnablementRulesCache = @{}
         $roleDefinitionsCache = @{}
 
@@ -197,9 +197,9 @@ function Enable-PIMRole {
             Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
             if ($roleDefinitionId -in $myActiveRoleIds) {
-                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..."
+                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                 Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..."
+                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
 
                 $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
                 
@@ -273,9 +273,9 @@ function Enable-PIMRole {
             $policyId = $policyAssignment.PolicyId
 
             if ($needsUpdating) {
-                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                 Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
     
                 try {
                     $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
@@ -293,9 +293,9 @@ function Enable-PIMRole {
                     $policyObj = $policyObjsHash[$policyId]
 
                 } else {
-                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                     Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
         
                     try {
                         $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
@@ -380,6 +380,7 @@ function Enable-PIMRole {
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
                     "MaxDuration" = $expirationRule.maximumDuration
                     "EnablementRule" = $enablementRule
+                    "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).Minutes }
                 }
             }
         }
@@ -399,7 +400,13 @@ function Enable-PIMRole {
         $rolesWereDisabled = $false
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Not Active") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👎  " -f $($selection.RoleName))
+                if ($selection.More.ActiveMinutes -le 5) {
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+                    Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
+                    continue
+                }
+
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
                 Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
@@ -437,6 +444,10 @@ function Enable-PIMRole {
         }
 
         foreach ($selection in $userSelections) {
+            # Skip activating active roles that have been active for less than 5 mins
+            # Coz we wouldn't have been able to disable them above to reactivate
+            if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
+
             if ($selection.More.EnablementRule -contains "Justification") {
                 Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
 
@@ -479,7 +490,7 @@ function Enable-PIMRole {
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -504,8 +515,11 @@ function Enable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👍  " -f $($selection.RoleName))
+            # Skip activating active roles that have been active for less than 5 mins
+            # Coz we wouldn't have been able to disable them above to reactivate
+            if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
 
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -554,7 +568,7 @@ function Enable-PIMRole {
             }
         }
 
-        if ($requestObj.Count -ne 0) {
+        if ($requestObjsArray.Count -ne 0) {
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
@@ -615,6 +629,8 @@ function Disable-PIMRole {
     }
 
     process {
+        Write-Host ""
+
         $roleDefinitionsCache = @{}
 
         # I use these for showing progress
@@ -692,6 +708,7 @@ function Disable-PIMRole {
                 "More" = [pscustomobject]@{
                     "RoleDefinitionId" = $roleObj.RoleDefinitionId
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
+                    "ActiveMinutes" = (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).Minutes
                 }
             }
         }
@@ -707,7 +724,13 @@ function Disable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👎  " -f $($selection.RoleName))
+            if ($selection.More.ActiveMinutes -le 5) {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+                Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
+                continue
+            }
+
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
             Write-Host "Disabling role"
 
             $params = @{
@@ -724,11 +747,11 @@ function Disable-PIMRole {
                 $requestObjsArray += $requestObj
         
             } catch {
-                Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+                Write-Error "Error deactivating '$($selection.RoleName)': $($_.Exception.Message)"
             }
         }
 
-        if ($userSelections.Count -ne 0) {
+        if ($requestObjsArray.Count -ne 0) {
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
