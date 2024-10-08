@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.2'
+    ModuleVersion = '0.0.3'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -115,7 +115,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Added a cmdlet to disable roles. Output improvements. If a selected role is already enabled, then disable and enable it. Cache some of the roles for speedier performance.'
+            ReleaseNotes = 'Minor changes.'
     
             # Prerelease string of this module
             # Prerelease = ''

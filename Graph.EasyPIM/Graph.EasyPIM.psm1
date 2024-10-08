@@ -18,6 +18,8 @@ function Enable-PIMRole {
     .DESCRIPTION
     Enable Entra ID PIM roles via an easy to use TUI (Text User Interface). Only supports enabling; not disabling.
 
+    If a role needs a reason/ justification you can either enter one, or press enter to go with "xxx", or type something and end with * to use it for all the activations.
+
     .PARAMETER SkipJustification
     Optional. If specified, it sets the reason/ justifaction for activation to be "xxx".
 
