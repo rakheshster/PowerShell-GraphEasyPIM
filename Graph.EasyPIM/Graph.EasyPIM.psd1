@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.1'
+    ModuleVersion = '0.0.2'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -115,7 +115,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Initial release. Currently only Entra ID roles are supported; not groups or Azure roles.'
+            ReleaseNotes = 'Added a cmdlet to disable roles.'
     
             # Prerelease string of this module
             # Prerelease = ''

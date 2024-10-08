@@ -127,9 +127,6 @@ function Enable-PIMRole {
 
         [array]$myActiveRoleIds = $myActiveRoles.RoleDefinitionId
 
-        # I use this for tidying up some of the output later
-        $longestRoleLength = 1
-
         $roleStates = foreach ($roleObj in $myEligibleRoles) {
             $counter++
             $percentageComplete = ($counter/$totalCount)*100
@@ -139,17 +136,17 @@ function Enable-PIMRole {
 
             $roleDefinitionsCache[$roleDefinitionId] = $roleName
 
-            if ($roleName.Length -gt $longestRoleLength) { $longestRoleLength = $roleName.Length }
-
             $timespanArray = @()
             $roleExpired = $false
             $roleAssignmentType = "Not Active"
 
-            Write-Progress -Activity "Processing role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
-
-            Write-Progress -Activity "Calculating role durations" -ParentId 2 -Id 3 -Status " "
+            Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
             if ($roleDefinitionId -in $myActiveRoleIds) {
+                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..."
+                Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+                Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..."
+
                 $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
                 
                 # Double checking coz during my testing I ran into instances where this was sometimes incomplete
@@ -193,6 +190,7 @@ function Enable-PIMRole {
                     $roleExpired = $true 
                 }
 
+                Write-Progress -Id 1 -Completed
 
             } else {
                 $roleExpired = $true
@@ -220,8 +218,10 @@ function Enable-PIMRole {
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicy?view=graph-rest-1.0
             $policyId = $policyAssignment.PolicyId
 
-            Write-Progress -Id 3 -Completed
-            Write-Progress -Activity "Fetching policy id '$(($policyId -split '_')[2])'" -ParentId 2 -Id 3
+            Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+            Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+            Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+
             try {
                 $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
 
@@ -294,7 +294,7 @@ function Enable-PIMRole {
                 $policyEnablementRulesCache.$policyId = $expirationRule
             }
 
-            Write-Progress -Completed -Id 3
+            Write-Progress -Completed -Id 1
 
             [pscustomobject][ordered]@{
                 "RoleName" = $roleName
@@ -311,17 +311,17 @@ function Enable-PIMRole {
             }
         }
 
-        Write-Progress -Completed -Id 2
+        Write-Progress -Completed -Id 0
 
-        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of Entra ID PIM roles"
+        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles"
 
         # Lets ask for the required info upfront
         $justificationsHash = @{}
         $ticketSystemHash = @{}
         $ticketNumberHash = @{}
 
-        # Add some padding to the longest length
-        $longestRoleLength = $longestRoleLength + 2
+        # I use this for tidying up some of the output later; find the longest entry in the selections
+        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length + 1
 
         foreach ($selection in $userSelections) {
             if ($selection.Status -eq "Not Active") {
@@ -382,6 +382,10 @@ function Enable-PIMRole {
                     }
                 }
             }
+        }
+
+        if ($userSelections.Count -ne 0) {
+            Write-Host ""
         }
 
         # An array to capture each of the items we action below
@@ -451,6 +455,8 @@ function Enable-PIMRole {
                 Start-Sleep -Seconds 1
                 $counter++
             }
+
+            Write-Progress -Completed
         }
 
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
@@ -507,9 +513,6 @@ function Disable-PIMRole {
         [int]$counter = 0
         [int]$totalCount = $myActiveRoles.Count
 
-        # I use this for tidying up some of the output later
-        $longestRoleLength = 1
-
         $roleStates = foreach ($roleObj in $myActiveRoles) {
             $counter++
             $percentageComplete = ($counter/$totalCount)*100
@@ -519,15 +522,15 @@ function Disable-PIMRole {
 
             $roleDefinitionsCache[$roleDefinitionId] = $roleName
 
-            if ($roleName.Length -gt $longestRoleLength) { $longestRoleLength = $roleName.Length }
-
             $timespanArray = @()
             $roleExpired = $false
             $roleAssignmentType = "Not Active"
 
-            Write-Progress -Activity "Processing role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+            Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
-            Write-Progress -Activity "Calculating role durations" -ParentId 2 -Id 3
+            Write-Progress -Activity "Calculating role durations" -ParentId 0 -Id 1 -Status "Waiting..."
+            Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+            Write-Progress -Activity "Calculating role durations" -ParentId 0 -Id 1 -Status "Waiting..."
 
             $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
                 
@@ -572,7 +575,7 @@ function Disable-PIMRole {
                 $roleExpired = $true 
             }
 
-            Write-Progress -Completed -Id 3 
+            Write-Progress -Id 1 -Completed
 
             [pscustomobject][ordered]@{
                 "RoleName" = $roleName
@@ -585,12 +588,12 @@ function Disable-PIMRole {
             }
         }
 
-        Write-Progress -Completed -Id 2
+        Write-Progress -Id 0 -Completed
 
         $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
 
-        # Add some padding to the longest length
-        $longestRoleLength = $longestRoleLength + 2
+        # I use this for tidying up some of the output later; find the longest entry in the selections
+        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length + 1
 
         # An array to capture each of the items we action below
         $requestObjsArray = @()
@@ -635,6 +638,8 @@ function Disable-PIMRole {
                 Start-Sleep -Seconds 1
                 $counter++
             }
+
+            Write-Progress -Completed
         }
 
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
