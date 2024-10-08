@@ -9,7 +9,9 @@ function Enable-PIMRole {
         [string]$Justification,
 
         [Parameter(Mandatory=$false)]
-        [string]$TicketingSystem
+        [string]$TicketingSystem,
+
+        [switch]$RefreshEligibleRoles
     )
 
     <#
@@ -24,6 +26,10 @@ function Enable-PIMRole {
 
     .PARAMETER TicketingSystem
     Optional. If specified, it sets the tickting system (for role activations that need a ticket number) to be whatever is input.
+
+    .PARAMETER RefreshEligibleRoles
+    Optional. By default, eligible roles are only checked if it's been more than 30 mins since the last invocation. If you want to check before that, use this switch. 
+
     #>
 
     begin {
@@ -50,9 +56,47 @@ function Enable-PIMRole {
 
         $userId = (Get-MgUser -UserId $context.Account).Id
 
+        if ($RefreshEligibleRoles) {
+            $needsUpdating = $true
+
+        } else {
+            # Only pull in the eligible roles if needed; else use the cached info
+            $currentTime = (Get-Date).ToUniversalTime()
+            $lastUpdated = $script:lastUpdated
+
+            if ($null -ne $lastUpdated) {
+                $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdated -End $currentTime
+            
+                if ($lastUpdatedTimespan.TotalMinutes -gt 30) {
+                    $needsUpdating = $true
+                
+                } else {
+                    $needsUpdating = $false
+                    if ($lastUpdatedTimespan.TotalMinutes -eq 1) {
+                        $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minute"
+
+                    } else {
+                        $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minutes"
+                    }
+                }
+        
+            } else {
+                $needsUpdating = $true
+            }
+        }
+
         try {
-            Write-Progress -Activity "Fetching all eligible Entra ID roles"
-            [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
+            if ($needsUpdating) {
+                Write-Progress -Activity "Fetching all eligible Entra ID roles"
+                [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
+                [array]$script:myEligibleRoles = $myEligibleRoles
+                $script:lastUpdated = $currentTime
+
+            } else {
+                Write-Host "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
+                Write-Host "👉 You can re-run with -RefreshEligibleRoles to force a refresh."
+                [array]$myEligibleRoles = $script:myEligibleRoles
+            }
 
             Write-Progress -Activity "Fetching all active Entra ID roles"
             [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
@@ -76,38 +120,48 @@ function Enable-PIMRole {
         $totalCount = $myEligibleRoles.Count
 
         # Loop through the entries
-        foreach ($roleObj in $myEligibleRoles) {
-            Write-Progress -Activity "Fetching policies assigned to roles" -Id 0
-            $counter++
-            $roleDefinitionId = $roleObj.RoleDefinitionId
-
-            # An array where I keep adding the snippets
-            $searchSnippetsArray += "roleDefinitionId eq '$roleDefinitionId'"
-
-            # In batches of 5, or if the counter has reached the end...
-            if ($counter % 5 -eq 0 -or $counter -ge $totalCount) {
-                # ... construct the search snippet
-                $searchSnippet = $searchSnippetMain + $($searchSnippetsArray -join ' or ') + ")"
-
-                # Do the search
-                Write-Progress -Activity "Fetching..." -ParentId 0 -Id 1 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
-                try {
-                    $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
-                
-                } catch {
-                    throw "Error fetching policy assignments: $($_.Exception.Message)"
+        if ($needsUpdating) {
+            foreach ($roleObj in $myEligibleRoles) {
+                Write-Progress -Activity "Fetching policies assigned to roles" -Id 0
+                $counter++
+                $roleDefinitionId = $roleObj.RoleDefinitionId
+    
+                # An array where I keep adding the snippets
+                $searchSnippetsArray += "roleDefinitionId eq '$roleDefinitionId'"
+    
+                # In batches of 5, or if the counter has reached the end...
+                if ($counter % 5 -eq 0 -or $counter -ge $totalCount) {
+                    # ... construct the search snippet
+                    $searchSnippet = $searchSnippetMain + $($searchSnippetsArray -join ' or ') + ")"
+    
+                    # Do the search
+                    Write-Progress -Activity "Fetching..." -ParentId 0 -Id 1 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
+                    try {
+                        $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
+                    
+                    } catch {
+                        throw "Error fetching policy assignments: $($_.Exception.Message)"
+                    }
+                    
+                    # And add it to the hash
+                    foreach ($result in $policyAssignment) {
+                        $policyAssignmentHash[$($result.RoleDefinitionId)] = $result
+                    }
+    
+                    # Initialize the array again
+                    $searchSnippetsArray = @()
                 }
-                
-                # And add it to the hash
-                foreach ($result in $policyAssignment) {
-                    $policyAssignmentHash[$($result.RoleDefinitionId)] = $result
-                }
-
-                # Initialize the array again
-                $searchSnippetsArray = @()
             }
-        }
 
+            $script:policyAssignmentHash = $policyAssignmentHash
+            $script:policyObjsHash = @{}    # Initialize this hash table for later (this is updated in the loop below)
+
+        } else {
+            $policyAssignmentHash = $script:policyAssignmentHash
+            $policyObjsHash = $script:policyObjsHash
+
+        }
+        
         # I tried to do the same for policies & rules, but couldn't get it working... I can't seem to filter on PolicyId or policyId or any other variants!
 
         Write-Progress -Id 1 -Completed
@@ -115,9 +169,6 @@ function Enable-PIMRole {
     }
 
     process {
-        # Cache the policy expiration rules so I don't have to lookup each time. 
-        # I don't think this is really needed coz in my testing there seems to be a separate policy per role, but no harm done I suppose... useful when troubleshooting!
-        $policyExpRulesCache = @{}
         $policyEnablementRulesCache = @{}
         $roleDefinitionsCache = @{}
 
@@ -218,30 +269,49 @@ function Enable-PIMRole {
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicy?view=graph-rest-1.0
             $policyId = $policyAssignment.PolicyId
 
-            Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
-            Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-            Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+            if ($needsUpdating) {
+                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+    
+                try {
+                    $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
+                    
+                    $script:policyObjsHash[$policyId] = $policyObj
 
-            try {
-                $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
+                } catch {
+                    Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
+                    continue
+                }
+    
+            } else {
+                # In the odd chance that I don't have a cached entry for this policyId, I first check if it's present and if not get the latest entry
+                if ($policyObjsHash.Keys -contains $policyId) {
+                    $policyObj = $policyObjsHash[$policyId]
 
-            } catch {
-                Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
-                continue
+                } else {
+                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+                    Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..."
+        
+                    try {
+                        $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
+                        
+                        $script:policyObjsHash[$policyId] = $policyObj
+
+                    } catch {
+                        Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
+                        continue
+                    }
+                }
             }
-            
+
             # The policy is what defines the max duration of the role and other factors. We are interested in here are the rules
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyrule?view=graph-rest-1.0
-            # If I have the rule already cached, use that
-            if ($policyExpRulesCache.Keys -contains $policyId) {
-                $expirationRule = $policyExpRulesCache.$policyId
-
-            } else {
-                # The 'Expiration_EndUser_Assignment' rule in the policy is what defines the maximum duration
-                # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyexpirationrule?view=graph-rest-1.0
-                $expirationRule = ($policyObj.Rules | Where-Object { $_.Id -eq "Expiration_EndUser_Assignment" }).AdditionalProperties
-                $policyExpRulesCache.$policyId = $expirationRule
-            }
+            
+            # The 'Expiration_EndUser_Assignment' rule in the policy is what defines the maximum duration
+            # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyexpirationrule?view=graph-rest-1.0
+            $expirationRule = ($policyObj.Rules | Where-Object { $_.Id -eq "Expiration_EndUser_Assignment" }).AdditionalProperties
 
             if ($expirationRule.maximumDuration -match "^PT") {
                 # Thanks https://stackoverflow.com/a/57296616
@@ -321,69 +391,106 @@ function Enable-PIMRole {
         $ticketNumberHash = @{}
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
-        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length + 1
+        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
 
+        $rolesWereDisabled = $false
         foreach ($selection in $userSelections) {
-            if ($selection.Status -eq "Not Active") {
-                if ($selection.More.EnablementRule -contains "Justification") {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+            if ($selection.Status -eq "Active") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+                Write-Host "Disabling role (so we can enable it again)"
 
-                    if ($SkipJustification) {
-                        $justificationsHash[$($selection.RoleName)] = "xxx"
-                        Write-Host "Reason will be set to: xxx"
-
-                    } elseif ($Justification.Length -ne 0) {
-                        $justificationsHash[$($selection.RoleName)] = $Justification
-                        Write-Host "Reason will be set to: $Justification"
-
-                    } else {
-                        $justificationInput = Read-Host "Please provide a reason"
-                    
-                        # If the justitication ends with an asterisk, use it for everything else that follows...
-                        if ($justificationInput -match '\*$') {
-                            # First, remove the asterisk
-                            $justificationInput = $justificationInput -replace '\*$',''
-
-                            # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
-                            # If after removing the asterisk there's nothing, then set it to xxx for all. This is basically equivalent to -SkipJustification
-                            if ($justificationInput.Length -eq 0) {
-                                $justificationInput = "xxx"
-                                $justificationsHash[$($selection.RoleName)] = $justificationInput
-                            }
-                            
-                            # Set the justification for everything that follows to be this
-                            $Justification = $justificationInput
-                            $justificationsHash[$($selection.RoleName)] = $justificationInput
-
-                        } else {
-                            $justificationsHash[$($selection.RoleName)] = $justificationInput
-                        }
-
-                        Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
-                        Write-Host "Reason will be set to: $justificationInput"
-                    }
+                $params = @{
+                    Action = "selfDeactivate"
+                    PrincipalId = $userId
+                    RoleDefinitionId = $selection.More.RoleDefinitionId
+                    DirectoryScopeId = $selection.More.DirectoryScopeId
                 }
 
-                if ($selection.More.EnablementRule -contains "Ticketing") {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+                try {
+                    $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+                
+                    # And add it to an array so we can loop over in the end
+                    $requestObjsArray += $requestObj
 
-                    $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
+                    $rolesWereDisabled = $true
+            
+                } catch {
+                    Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+                }
+            }
+        }
 
-                    if ($TicketingSystem.Length -ne 0) {
-                        Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
-                        $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
+        if ($rolesWereDisabled) {
+            $counter = 0
+            $maxWaitSecs = 20
+            while ($counter -lt $maxWaitSecs) {
+                Write-Progress "Waiting $maxWaitSecs seconds before continuing" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Start-Sleep -Seconds 1
+                $counter++
+            }
 
-                        # If the justitication ends with an asterisk, use it for everything else that follows...
-                        if ($ticketingSystemInput -match '\*$') {
-                            $ticketingSystemInput = $ticketingSystemInput -replace '\*$',''
-                            $TicketingSystem = $ticketingSystemInput
+            Write-Progress -Completed
+        }
+
+        foreach ($selection in $userSelections) {
+            if ($selection.More.EnablementRule -contains "Justification") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+
+                if ($SkipJustification) {
+                    $justificationsHash[$($selection.RoleName)] = "xxx"
+                    Write-Host "Reason will be set to: xxx"
+
+                } elseif ($Justification.Length -ne 0) {
+                    $justificationsHash[$($selection.RoleName)] = $Justification
+                    Write-Host "Reason will be set to: $Justification"
+
+                } else {
+                    $justificationInput = Read-Host "Please provide a reason"
+                
+                    # If the justitication ends with an asterisk, use it for everything else that follows...
+                    if ($justificationInput -match '\*$') {
+                        # First, remove the asterisk
+                        $justificationInput = $justificationInput -replace '\*$',''
+
+                        # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
+                        # If after removing the asterisk there's nothing, then set it to xxx for all. This is basically equivalent to -SkipJustification
+                        if ($justificationInput.Length -eq 0) {
+                            $justificationInput = "xxx"
+                            $justificationsHash[$($selection.RoleName)] = $justificationInput
                         }
-
-                        $ticketSystemHash[$($selection.RoleName)] = $ticketingSystemInput
+                        
+                        # Set the justification for everything that follows to be this
+                        $Justification = $justificationInput
+                        $justificationsHash[$($selection.RoleName)] = $justificationInput
 
                     } else {
-                        $ticketSystemHash[$($selection.RoleName)] = $TicketingSystem
+                        $justificationsHash[$($selection.RoleName)] = $justificationInput
                     }
+
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+                    Write-Host "Reason will be set to: $justificationInput"
+                }
+            }
+
+            if ($selection.More.EnablementRule -contains "Ticketing") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
+
+                $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
+
+                if ($TicketingSystem.Length -ne 0) {
+                    Write-Host -NoNewline -ForegroundColor Yellow "'$($selection.RoleName)' "
+                    $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
+
+                    # If the justitication ends with an asterisk, use it for everything else that follows...
+                    if ($ticketingSystemInput -match '\*$') {
+                        $ticketingSystemInput = $ticketingSystemInput -replace '\*$',''
+                        $TicketingSystem = $ticketingSystemInput
+                    }
+
+                    $ticketSystemHash[$($selection.RoleName)] = $ticketingSystemInput
+
+                } else {
+                    $ticketSystemHash[$($selection.RoleName)] = $TicketingSystem
                 }
             }
         }
@@ -396,7 +503,7 @@ function Enable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
 
             if ($selection.Status -ne "Not Active") {
                 Write-Host "Skipping as its status is '$($selection.Status)'"
@@ -451,11 +558,11 @@ function Enable-PIMRole {
             }
         }
 
-        if ($userSelections.Count -ne 0) {
+        if ($requestObj.Count -ne 0) {
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
-                Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Write-Progress "⌚ Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
                 Start-Sleep -Seconds 1
                 $counter++
             }
@@ -474,6 +581,7 @@ function Enable-PIMRole {
     }
 }
 # This is a copy paste of Enable-PIMRole with some bits removed...
+# It's very simple compared to Enable-PIMRole
 function Disable-PIMRole {
     begin {
         $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
@@ -597,13 +705,13 @@ function Disable-PIMRole {
         $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
-        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length + 1
+        $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
 
         # An array to capture each of the items we action below
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  ⏩  " -f $($selection.RoleName))
             Write-Host "Disabling role"
 
             $params = @{
@@ -615,15 +723,6 @@ function Disable-PIMRole {
 
             try {
                 $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
-
-                # Show the output to screen
-
-                <#
-                $requestObj | Select-Object -Property @{
-                    "Name" = "Role";
-                    "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
-                },Status
-                #>
             
                 # And add it to an array so we can loop over in the end
                 $requestObjsArray += $requestObj
@@ -631,7 +730,6 @@ function Disable-PIMRole {
             } catch {
                 Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
             }
-        
         }
 
         if ($userSelections.Count -ne 0) {

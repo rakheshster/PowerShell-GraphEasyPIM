@@ -5,7 +5,8 @@ You can install the module [from PowerShell Gallery](https://www.powershellgalle
 
 Tested primarily on Windows with PowerShell 7.4, but I don't see any reason why it wouldn't work on macOS and Linux. It currently has the following cmdlets:
 
-\- `Enable-PIMRole` - enable (activate) Entra ID PIM roles
+- `Enable-PIMRole` - enable (activate) Entra ID PIM roles
+- `Disable-PIMRole` - disable (deactivate) Entra ID PIM roles
 
 ## Pre-requisite modules
 This modules depends upon the following. 

@@ -115,7 +115,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Added a cmdlet to disable roles.'
+            ReleaseNotes = 'Added a cmdlet to disable roles. Output improvements. If a selected role is already enabled, then disable and enable it. Cache some of the roles for speedier performance.'
     
             # Prerelease string of this module
             # Prerelease = ''
