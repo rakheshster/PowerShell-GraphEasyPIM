@@ -338,25 +338,29 @@ function Enable-PIMRole {
 
                     } else {
                         $justificationInput = Read-Host "Please provide a reason"
-                        
+                    
                         # If the justitication ends with an asterisk, use it for everything else that follows...
-                        # First, remove the asterisk
                         if ($justificationInput -match '\*$') {
+                            # First, remove the asterisk
                             $justificationInput = $justificationInput -replace '\*$',''
-                        }
 
-                        # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
-                        # If after removing the asterisk there's nothing, then set it to xyz for all. This is basically equivalent to -SkipJustification
-                        if ($justificationInput.Length -eq 0) {
-                            $justificationsHash[$($selection.RoleName)] = "xxx"
-                            Write-Host "'$($selection.RoleName)' Reason will be set to: xxx"
-                            $Justification = "xxx"
-
-                        } else {
-                            # If removing * does not result in an empty string, then use that as the justification for everything that follows
+                            # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
+                            # If after removing the asterisk there's nothing, then set it to xxx for all. This is basically equivalent to -SkipJustification
+                            if ($justificationInput.Length -eq 0) {
+                                $justificationInput = "xxx"
+                                $justificationsHash[$($selection.RoleName)] = $justificationInput
+                            }
+                            
+                            # Set the justification for everything that follows to be this
                             $Justification = $justificationInput
                             $justificationsHash[$($selection.RoleName)] = $justificationInput
+
+                        } else {
+                            $justificationsHash[$($selection.RoleName)] = $justificationInput
                         }
+
+                        Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} ⏩ " -f $($selection.RoleName))
+                        Write-Host "Reason will be set to: $justificationInput"
                     }
                 }
 
