@@ -51,7 +51,7 @@ function Enable-PIMRole {
         $userId = (Get-MgUser -UserId $context.Account).Id
 
         try {
-            Write-Progress -Activity "Fetching all eligibile Entra ID roles"
+            Write-Progress -Activity "Fetching all eligible Entra ID roles"
             [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
 
             Write-Progress -Activity "Fetching all active Entra ID roles"
