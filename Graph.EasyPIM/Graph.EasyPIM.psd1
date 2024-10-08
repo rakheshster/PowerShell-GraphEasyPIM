@@ -115,7 +115,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Minor changes.'
+            ReleaseNotes = 'Minor changes. Fixed a silly (non-critical) bug.'
     
             # Prerelease string of this module
             # Prerelease = ''

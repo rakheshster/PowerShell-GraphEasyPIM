@@ -382,7 +382,7 @@ function Enable-PIMRole {
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
                     "MaxDuration" = $expirationRule.maximumDuration
                     "EnablementRule" = $enablementRule
-                    "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).Minutes }
+                    "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }
                 }
             }
         }
@@ -710,7 +710,7 @@ function Disable-PIMRole {
                 "More" = [pscustomobject]@{
                     "RoleDefinitionId" = $roleObj.RoleDefinitionId
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
-                    "ActiveMinutes" = (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).Minutes
+                    "ActiveMinutes" = (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes
                 }
             }
         }
