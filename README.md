@@ -9,7 +9,7 @@ Install-Module -Name Graph.EasyPIM
 
 Not using PowerShell Gallery? Download the source code from this 👇 repo, or get started with PowerShell Gallery following the instructions [here](https://learn.microsoft.com/en-gb/powershell/gallery/getting-started?view=powershellget-3.x).
 
-Tested primarily on Windows with PowerShell 7.4, but I don't see any reason why it wouldn't work on macOS and Linux. It currently has the following cmdlets:
+Tested primarily on Windows, macOS, and Linux with PowerShell 7.4. It currently has the following cmdlets:
 
 - `Enable-PIMRole` - enable (activate) Entra ID PIM roles
 - `Disable-PIMRole` - disable (deactivate) Entra ID PIM roles

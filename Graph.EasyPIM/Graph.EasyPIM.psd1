@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.3'
+    ModuleVersion = '0.0.4'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -54,7 +54,8 @@
     RequiredModules = @(
         "Microsoft.Graph.Authentication",
         "Microsoft.Graph.Identity.Governance",
-        "Microsoft.PowerShell.ConsoleGuiTools"
+        "Microsoft.PowerShell.ConsoleGuiTools",
+        "Microsoft.Graph.Identity.DirectoryManagement"
     )
     
     # Assemblies that must be loaded prior to importing this module
@@ -115,7 +116,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Minor changes. Fixed a silly (non-critical) bug.'
+            ReleaseNotes = 'Minor UI changes. And the module checks if a newer version is available. Also, show admin unit if any. And fixed a bug that was exposed as part of enabling admin unit support.'
     
             # Prerelease string of this module
             # Prerelease = ''

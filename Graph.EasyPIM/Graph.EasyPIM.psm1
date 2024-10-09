@@ -37,6 +37,13 @@ function Enable-PIMRole {
     begin {
         $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
 
+        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+        [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+
+        if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
+            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+        }
+
         try {
             Connect-MgGraph -Scopes $requiredScopesArray -NoWelcome -ErrorAction Stop
 
@@ -89,7 +96,7 @@ function Enable-PIMRole {
 
         try {
             if ($needsUpdating) {
-                Write-Progress -Activity "Fetching all eligible Entra ID roles"
+                Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
                 [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
                 [array]$script:myEligibleRoles = $myEligibleRoles
                 $script:lastUpdated = $currentTime
@@ -100,16 +107,17 @@ function Enable-PIMRole {
                 [array]$myEligibleRoles = $script:myEligibleRoles
             }
 
-            Write-Progress -Activity "Fetching all active Entra ID roles"
+            Write-Progress -Activity "Fetching all active Entra ID roles" -Id 0
             [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
             
         } catch {
             throw "Error fetching roles: $($_.Exception.Message)"
         }
 
-        Write-Progress -Completed
+        Write-Progress -Id 0 -Completed
 
         # Create a cache of assignments. This is faster as I can lookup a bunch of them beforehand.
+        # All roles have the same policy (settings) assigned to them. And a user could have the same role assigned in more than one way - e.g. various admin units. 
         $policyAssignmentHash = @{}
         # I must set scopeId to '/' coz if I search for a specific scopeId it errors: Attempted to perform an unauthorized operation.
         $searchSnippetMain = "scopeType eq 'DirectoryRole' and scopeId eq '/' and ("
@@ -157,6 +165,7 @@ function Enable-PIMRole {
 
             $script:policyAssignmentHash = $policyAssignmentHash
             $script:policyObjsHash = @{}    # Initialize this hash table for later (this is updated in the loop below)
+            $policyObjsHash = @{}   # Initialize this hash table for later (this is updated in the loop below)
 
         } else {
             $policyAssignmentHash = $script:policyAssignmentHash
@@ -274,7 +283,11 @@ function Enable-PIMRole {
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicy?view=graph-rest-1.0
             $policyId = $policyAssignment.PolicyId
 
-            if ($needsUpdating) {
+            # If I have encountered this policy before, dont look it up again
+            if ($policyObjsHash.Keys -contains $policyId) {
+                $policyObj = $policyObjsHash[$policyId]
+
+            } else {
                 Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                 Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
                 Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
@@ -282,32 +295,12 @@ function Enable-PIMRole {
                 try {
                     $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
                     
-                    $script:policyObjsHash[$policyId] = $policyObj
+                    $policyObjsHash[$policyId] = $policyObj # caching it for within this current execution
+                    $script:policyObjsHash[$policyId] = $policyObj  # caching it for future invocations of the module
 
                 } catch {
                     Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
                     continue
-                }
-    
-            } else {
-                # In the odd chance that I don't have a cached entry for this policyId, I first check if it's present and if not get the latest entry
-                if ($policyObjsHash.Keys -contains $policyId) {
-                    $policyObj = $policyObjsHash[$policyId]
-
-                } else {
-                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
-                    Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-                    Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
-        
-                    try {
-                        $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
-                        
-                        $script:policyObjsHash[$policyId] = $policyObj
-
-                    } catch {
-                        Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
-                        continue
-                    }
                 }
             }
 
@@ -366,7 +359,27 @@ function Enable-PIMRole {
                 # The 'Expiration_EndUser_Assignment' rule in the policy is what defines the maximum duration
                 # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyexpirationrule?view=graph-rest-1.0
                 $enablementRule = ($policyObj.Rules | Where-Object { $_.Id -eq "Enablement_EndUser_Assignment" }).AdditionalProperties.enabledRules
-                $policyEnablementRulesCache.$policyId = $expirationRule
+                $policyEnablementRulesCache.$policyId = $enablementRule
+            }
+
+            # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
+            if ($roleObj.DirectoryScopeId -eq '/') {
+                $roleScope = "Directory"
+
+            } elseif ($roleObj.DirectoryScopeId -match "\/administrativeUnits\/") {
+                $adminUnitId = $roleObj.DirectoryScopeId -replace '\/administrativeUnits\/',''
+                try {
+                    $adminUnitName = (Get-MgDirectoryAdministrativeUnit -AdministrativeUnitId $adminUnitId -ErrorAction Stop).DisplayName
+
+                } catch {
+                    $adminUnitName = $adminUnitId
+                }
+
+                $roleScope = "$adminUnitName (Admin Unit)"
+
+            } else {
+                $appScope = $roleObj.DirectoryScopeId -replace '\/',''
+                $roleScope = "$appScope (App)"
             }
 
             Write-Progress -Completed -Id 1
@@ -377,6 +390,7 @@ function Enable-PIMRole {
                 "ExpiresIn" = if (!($roleExpired)) { $timespanArray -join ' ' }
                 "MaxDuration" = $maxDuration
                 "EnablementRules" = $enablementRule -join '|' -replace 'Justification','Reason' -replace 'Ticketing','Ticket' -replace 'MultiFactorAuthentication','MFA'
+                "Scope" = $roleScope
                 "More" = [pscustomobject]@{
                     "RoleDefinitionId" = $roleObj.RoleDefinitionId
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
@@ -571,6 +585,8 @@ function Enable-PIMRole {
         }
 
         if ($requestObjsArray.Count -ne 0) {
+            Write-Host ""
+
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
@@ -582,7 +598,13 @@ function Enable-PIMRole {
             Write-Progress -Completed
         }
 
+        $counter = 0
+        $totalCount = $requestObjsArray.Count
+
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
+            $counter++
+            Write-Progress "$($roleDefinitionsCache[$($_.RoleDefinitionId)])" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            
             Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -UnifiedRoleAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
                 "Name" = "Role";
                 "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
@@ -597,6 +619,13 @@ function Enable-PIMRole {
 function Disable-PIMRole {
     begin {
         $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
+
+        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+        [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+
+        if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
+            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+        }
 
         try {
             Connect-MgGraph -Scopes $requiredScopesArray -NoWelcome -ErrorAction Stop
@@ -620,14 +649,14 @@ function Disable-PIMRole {
         $userId = (Get-MgUser -UserId $context.Account).Id
 
         try {
-            Write-Progress -Activity "Fetching all active Entra ID roles"
+            Write-Progress -Activity "Fetching all active Entra ID roles" -Id 0
             [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
             
         } catch {
             throw "Error fetching roles: $($_.Exception.Message)"
         }
 
-        Write-Progress -Completed
+        Write-Progress -Id 0 -Completed
     }
 
     process {
@@ -701,12 +730,33 @@ function Disable-PIMRole {
                 $roleExpired = $true 
             }
 
+            # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
+            if ($roleObj.DirectoryScopeId -eq '/') {
+                $roleScope = "Directory"
+
+            } elseif ($roleObj.DirectoryScopeId -match "\/administrativeUnits\/") {
+                $adminUnitId = $roleObj.DirectoryScopeId -replace '\/administrativeUnits\/',''
+                try {
+                    $adminUnitName = (Get-MgDirectoryAdministrativeUnit -AdministrativeUnitId $adminUnitId -ErrorAction Stop).DisplayName
+
+                } catch {
+                    $adminUnitName = $adminUnitId
+                }
+
+                $roleScope = "$adminUnitName (Admin Unit)"
+
+            } else {
+                $appScope = $roleObj.DirectoryScopeId -replace '\/',''
+                $roleScope = "$appScope (App)"
+            }
+
             Write-Progress -Id 1 -Completed
 
             [pscustomobject][ordered]@{
                 "RoleName" = $roleName
                 "Status" = $roleAssignmentType
                 "ExpiresIn" = if (!($roleExpired)) { $timespanArray -join ' ' }
+                "Scope" = $roleScope
                 "More" = [pscustomobject]@{
                     "RoleDefinitionId" = $roleObj.RoleDefinitionId
                     "DirectoryScopeId" = $roleObj.DirectoryScopeId
@@ -754,6 +804,8 @@ function Disable-PIMRole {
         }
 
         if ($requestObjsArray.Count -ne 0) {
+            Write-Host ""
+
             $counter = 0
             $maxWaitSecs = 20
             while ($counter -lt $maxWaitSecs) {
@@ -765,7 +817,13 @@ function Disable-PIMRole {
             Write-Progress -Completed
         }
 
+        $counter = 0
+        $totalCount = $requestObjsArray.Count
+
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
+            $counter++
+            Write-Progress "$($roleDefinitionsCache[$($_.RoleDefinitionId)])" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            
             Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -UnifiedRoleAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
                 "Name" = "Role";
                 "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
