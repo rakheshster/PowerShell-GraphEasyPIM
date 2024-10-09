@@ -420,12 +420,12 @@ function Enable-PIMRole {
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Not Active") {
                 if ($selection.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
@@ -465,7 +465,7 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.RoleName)] = "$defaultJustification"
@@ -501,12 +501,12 @@ function Enable-PIMRole {
             }
 
             if ($selection.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -535,7 +535,7 @@ function Enable-PIMRole {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -586,7 +586,6 @@ function Enable-PIMRole {
 
         if ($requestObjsArray.Count -ne 0) {
             Write-Host ""
-            Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
 
             $counter = 0
             $maxWaitSecs = 20
@@ -780,12 +779,12 @@ function Disable-PIMRole {
 
         foreach ($selection in $userSelections) {
             if ($selection.More.ActiveMinutes -le 5) {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
             }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Disabling role"
 
             $params = @{
@@ -808,7 +807,6 @@ function Disable-PIMRole {
 
         if ($requestObjsArray.Count -ne 0) {
             Write-Host ""
-            Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
 
             $counter = 0
             $maxWaitSecs = 20

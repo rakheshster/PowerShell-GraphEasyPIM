@@ -116,7 +116,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Minor bug fix when activating an already active role. It works but was throwing an error. Admin unit improvements.'
+            ReleaseNotes = 'Very minor UI change of adding a space.'
     
             # Prerelease string of this module
             # Prerelease = ''
