@@ -132,7 +132,7 @@ function Enable-PIMRole {
         # Loop through the entries
         if ($needsUpdating) {
             foreach ($roleObj in $myEligibleRoles) {
-                Write-Progress -Activity "Fetching policies assigned to roles" -Id 0
+                Write-Progress -Activity "Fetching settings assigned to roles" -Id 0
                 $counter++
                 $roleDefinitionId = $roleObj.RoleDefinitionId
     
@@ -150,7 +150,7 @@ function Enable-PIMRole {
                         $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
                     
                     } catch {
-                        throw "Error fetching policy assignments: $($_.Exception.Message)"
+                        throw "Error fetching settings assignments: $($_.Exception.Message)"
                     }
                     
                     # And add it to the hash
@@ -198,6 +198,7 @@ function Enable-PIMRole {
 
             $roleDefinitionId = $roleObj.RoleDefinitionId
             $roleName = $roleObj.RoleDefinition.DisplayName
+            $roleDirectoryScopeId = $roleObj.DirectoryScopeId
 
             $roleDefinitionsCache[$roleDefinitionId] = $roleName
 
@@ -207,12 +208,13 @@ function Enable-PIMRole {
 
             Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
-            if ($roleDefinitionId -in $myActiveRoleIds) {
+            $activeRoleObj = $null
+            $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" -and $_.DirectoryScopeId -eq "$roleDirectoryScopeId" }
+
+            if ($activeRoleObj) {
                 Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                 Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
                 Write-Progress -Activity "Role is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
-
-                $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" }
                 
                 # Double checking coz during my testing I ran into instances where this was sometimes incomplete
                 if ($activeRoleObj.ScheduleInfo.Expiration.EndDateTime) {
@@ -288,9 +290,9 @@ function Enable-PIMRole {
                 $policyObj = $policyObjsHash[$policyId]
 
             } else {
-                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                Write-Progress -Activity "Fetching settings '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
                 Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
-                Write-Progress -Activity "Fetching policy '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                Write-Progress -Activity "Fetching settings '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
     
                 try {
                     $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
@@ -299,7 +301,7 @@ function Enable-PIMRole {
                     $script:policyObjsHash[$policyId] = $policyObj  # caching it for future invocations of the module
 
                 } catch {
-                    Write-Warning "Error fetching policy id '$policyId': $($_.Exception.Message)"
+                    Write-Warning "Error fetching settings id '$policyId': $($_.Exception.Message)"
                     continue
                 }
             }
@@ -363,11 +365,11 @@ function Enable-PIMRole {
             }
 
             # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
-            if ($roleObj.DirectoryScopeId -eq '/') {
+            if ($roleDirectoryScopeId -eq '/') {
                 $roleScope = "Directory"
 
-            } elseif ($roleObj.DirectoryScopeId -match "\/administrativeUnits\/") {
-                $adminUnitId = $roleObj.DirectoryScopeId -replace '\/administrativeUnits\/',''
+            } elseif ($roleDirectoryScopeId -match "\/administrativeUnits\/") {
+                $adminUnitId = $roleDirectoryScopeId -replace '\/administrativeUnits\/',''
                 try {
                     $adminUnitName = (Get-MgDirectoryAdministrativeUnit -AdministrativeUnitId $adminUnitId -ErrorAction Stop).DisplayName
 
@@ -378,7 +380,7 @@ function Enable-PIMRole {
                 $roleScope = "$adminUnitName (Admin Unit)"
 
             } else {
-                $appScope = $roleObj.DirectoryScopeId -replace '\/',''
+                $appScope = $roleDirectoryScopeId -replace '\/',''
                 $roleScope = "$appScope (App)"
             }
 
@@ -393,7 +395,7 @@ function Enable-PIMRole {
                 "Scope" = $roleScope
                 "More" = [pscustomobject]@{
                     "RoleDefinitionId" = $roleObj.RoleDefinitionId
-                    "DirectoryScopeId" = $roleObj.DirectoryScopeId
+                    "DirectoryScopeId" = $roleDirectoryScopeId
                     "MaxDuration" = $expirationRule.maximumDuration
                     "EnablementRule" = $enablementRule
                     "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }
@@ -412,17 +414,18 @@ function Enable-PIMRole {
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
         $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
+        $longestScopeLength = ($userSelections.Scope | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
 
         $rolesWereDisabled = $false
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Not Active") {
                 if ($selection.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
@@ -435,13 +438,10 @@ function Enable-PIMRole {
                 try {
                     $requestObj = New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
                 
-                    # And add it to an array so we can loop over in the end
-                    $requestObjsArray += $requestObj
-
                     $rolesWereDisabled = $true
             
                 } catch {
-                    Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+                    Write-Error "Error deactivating '$($selection.RoleName)': $($_.Exception.Message)"
                 }
             }
         }
@@ -465,7 +465,7 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.RoleName)] = "$defaultJustification"
@@ -501,12 +501,12 @@ function Enable-PIMRole {
             }
 
             if ($selection.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.RoleName))
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 📋  " -f $($selection.RoleName), $($selection.Scope))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -535,7 +535,7 @@ function Enable-PIMRole {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -586,6 +586,7 @@ function Enable-PIMRole {
 
         if ($requestObjsArray.Count -ne 0) {
             Write-Host ""
+            Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
 
             $counter = 0
             $maxWaitSecs = 20
@@ -603,7 +604,7 @@ function Enable-PIMRole {
 
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
             $counter++
-            Write-Progress "$($roleDefinitionsCache[$($_.RoleDefinitionId)])" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            Write-Progress "Fetching status of role '$($roleDefinitionsCache[$($requestObj.RoleDefinitionId)])'" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
             
             Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -UnifiedRoleAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
                 "Name" = "Role";
@@ -674,6 +675,7 @@ function Disable-PIMRole {
 
             $roleDefinitionId = $roleObj.RoleDefinitionId
             $roleName = $roleObj.RoleDefinition.DisplayName
+            $roleDirectoryScopeId = $roleObj.DirectoryScopeId
 
             $roleDefinitionsCache[$roleDefinitionId] = $roleName
 
@@ -731,11 +733,11 @@ function Disable-PIMRole {
             }
 
             # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
-            if ($roleObj.DirectoryScopeId -eq '/') {
+            if ($roleDirectoryScopeId -eq '/') {
                 $roleScope = "Directory"
 
-            } elseif ($roleObj.DirectoryScopeId -match "\/administrativeUnits\/") {
-                $adminUnitId = $roleObj.DirectoryScopeId -replace '\/administrativeUnits\/',''
+            } elseif ($roleDirectoryScopeId -match "\/administrativeUnits\/") {
+                $adminUnitId = $roleDirectoryScopeId -replace '\/administrativeUnits\/',''
                 try {
                     $adminUnitName = (Get-MgDirectoryAdministrativeUnit -AdministrativeUnitId $adminUnitId -ErrorAction Stop).DisplayName
 
@@ -746,7 +748,7 @@ function Disable-PIMRole {
                 $roleScope = "$adminUnitName (Admin Unit)"
 
             } else {
-                $appScope = $roleObj.DirectoryScopeId -replace '\/',''
+                $appScope = $roleDirectoryScopeId -replace '\/',''
                 $roleScope = "$appScope (App)"
             }
 
@@ -771,18 +773,19 @@ function Disable-PIMRole {
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
         $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
+        $longestScopeLength = ($userSelections.Scope | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
 
         # An array to capture each of the items we action below
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
             if ($selection.More.ActiveMinutes -le 5) {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
             }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.RoleName))
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}] 👉  " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Disabling role"
 
             $params = @{
@@ -805,6 +808,7 @@ function Disable-PIMRole {
 
         if ($requestObjsArray.Count -ne 0) {
             Write-Host ""
+            Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
 
             $counter = 0
             $maxWaitSecs = 20
@@ -822,7 +826,7 @@ function Disable-PIMRole {
 
         $finalOutput = foreach ($requestObj in $requestObjsArray) {
             $counter++
-            Write-Progress "$($roleDefinitionsCache[$($_.RoleDefinitionId)])" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            Write-Progress "Fetching status of role '$($roleDefinitionsCache[$($requestObj.RoleDefinitionId)])'" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
             
             Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -UnifiedRoleAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
                 "Name" = "Role";
