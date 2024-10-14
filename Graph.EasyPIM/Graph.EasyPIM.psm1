@@ -243,7 +243,8 @@ function Enable-PIMRole {
                 
                 # Double checking coz during my testing I ran into instances where this was sometimes incomplete
                 if ($activeRoleObj.ScheduleInfo.Expiration.EndDateTime) {
-                    $roleAssignmentType = $activeRoleObj.AssignmentType
+                    # $roleAssignmentType = $activeRoleObj.AssignmentType
+                    $roleAssignmentType = "Active"
 
                     $timeSpan = New-TimeSpan -Start (Get-Date).ToUniversalTime() -End $activeRoleObj.ScheduleInfo.Expiration.EndDateTime
                     if ($timeSpan.Days -gt 0) {
@@ -728,7 +729,8 @@ function Disable-PIMRole {
                 
             # Double checking coz during my testing I ran into instances where this was sometimes incomplete
             if ($activeRoleObj.ScheduleInfo.Expiration.EndDateTime) {
-                $roleAssignmentType = $activeRoleObj.AssignmentType
+                # $roleAssignmentType = $activeRoleObj.AssignmentType
+                $roleAssignmentType = "Active"
 
                 $timeSpan = New-TimeSpan -Start (Get-Date).ToUniversalTime() -End $activeRoleObj.ScheduleInfo.Expiration.EndDateTime
                 if ($timeSpan.Days -gt 0) {
