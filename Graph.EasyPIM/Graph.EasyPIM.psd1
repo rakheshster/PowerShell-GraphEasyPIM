@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.6'
+    ModuleVersion = '0.0.7'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -116,7 +116,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Very minor UI change of adding a space.'
+            ReleaseNotes = 'Huge speed improvements.'
     
             # Prerelease string of this module
             # Prerelease = ''
