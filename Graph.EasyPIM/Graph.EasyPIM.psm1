@@ -108,7 +108,7 @@ function Enable-PIMRole {
 
         try {
             if ($needsUpdating) {
-                Write-Host "🚀 Fetching all eligible & active Entra ID roles. This will take a few minutes."
+                Write-Host "🥷 Fetching all eligible & active Entra ID roles. This will take a few minutes."
 
                 Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
                 [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
@@ -144,7 +144,7 @@ function Enable-PIMRole {
 
         # Loop through the entries
         if ($needsUpdating) {
-            Write-Host "🛰 Fetching all role assignment settings. This will take a few minutes."
+            Write-Host "🚀 Fetching all role assignment settings. This will take a few minutes."
 
             foreach ($roleObj in $myEligibleRoles) {
                 $counter++
@@ -181,7 +181,7 @@ function Enable-PIMRole {
             Write-Progress -Id 0 -Completed
 
             # Fetching all the policies
-            Write-Host "🛰 Fetching all role settings."
+            Write-Host "🚀 Fetching all role settings."
 
             try {
                 $policyObjsHashRoles = @{}
@@ -987,7 +987,7 @@ function Enable-PIMGroup {
 
         try {
             if ($needsUpdating) {
-                Write-Host "🚀 Fetching all eligible & active Entra ID groups. This will take a few minutes."
+                Write-Host "🥷 Fetching all eligible & active Entra ID groups. This will take a few minutes."
 
                 Write-Progress -Activity "Fetching all eligible Entra ID groups" -Id 0
                 [array]$myEligibleGroups = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilitySchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
@@ -1023,7 +1023,7 @@ function Enable-PIMGroup {
         # Loop through the entries
         # Below doesn't work... loop through each group & do accessId member and owner
         if ($needsUpdating) {
-            Write-Host "🛰 Fetching all group settings. This will take a few minutes."
+            Write-Host "🚀 Fetching all group settings. This will take a few minutes."
 
             foreach ($groupRoleObj in $myEligibleGroups) {
                 $counter++
@@ -1063,7 +1063,7 @@ function Enable-PIMGroup {
             $policyAssignmentHashGroupsMember = $script:policyAssignmentHashGroupsMember
 
         }
-        
+
         Write-Progress -Id 0 -Completed
     }
 
