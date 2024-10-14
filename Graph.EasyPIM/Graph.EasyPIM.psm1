@@ -12,7 +12,8 @@ $requiredScopesArrayGroups = @("PrivilegedEligibilitySchedule.Read.AzureADGroup"
 
 $requiredScopesArray = $requiredScopesArrayRoles + $requiredScopesArrayGroups
 
-# Thanks https://www.pdq.com/blog/change-powershell-colors/ for showing me where to get these colors
+## The colors I will be using with Write-Host. Initially I was going to hardcode Yellow to match Write-Verbose, but then I thought what if the user has a different color scheme?
+## Thanks https://www.pdq.com/blog/change-powershell-colors/ for showing me where to get these colors
 $colorParams = @{}
 if ($host.PrivateData.VerboseForegroundColor -ne "-1") {
     $colorParams.ForegroundColor = $host.PrivateData.VerboseForegroundColor
