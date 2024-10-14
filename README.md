@@ -25,6 +25,7 @@ This modules depends upon the following.
 If it weren't for these, this module wouldn't exist! Thank you 😍 to the creators of these, especially `Microsoft.PowerShell.ConsoleGuiTools` which is what I use to drive things. 🙏
 
 ## Screenshots
+(These screenshots are from the first version of this module; the latest versions will have slight differences to what's shown below).
 
 Running `Enable-PIMRole` lists all the available and active Entra ID PIM roles for the user.
 
