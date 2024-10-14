@@ -181,7 +181,7 @@ function Enable-PIMRole {
             Write-Progress -Id 0 -Completed
 
             # Fetching all the policies
-            Write-Host "🚀 Fetching all role settings."
+            Write-Host "🧙 Fetching all role settings."
 
             try {
                 $policyObjsHashRoles = @{}
@@ -1023,7 +1023,7 @@ function Enable-PIMGroup {
         # Loop through the entries
         # Below doesn't work... loop through each group & do accessId member and owner
         if ($needsUpdating) {
-            Write-Host "🚀 Fetching all group settings. This will take a few minutes."
+            Write-Host "🧙 Fetching all group settings. This will take a few minutes."
 
             foreach ($groupRoleObj in $myEligibleGroups) {
                 $counter++
