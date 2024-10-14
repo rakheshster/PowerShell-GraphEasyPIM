@@ -47,6 +47,8 @@ function Enable-PIMRole {
     #>
 
     begin {
+        Write-Host ""
+
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
@@ -106,6 +108,8 @@ function Enable-PIMRole {
 
         try {
             if ($needsUpdating) {
+                Write-Host "🚀 Fetching all eligible & active Entra ID roles. This will take a few minutes."
+
                 Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
                 [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
                 [array]$script:myEligibleRoles = $myEligibleRoles
@@ -140,13 +144,16 @@ function Enable-PIMRole {
 
         # Loop through the entries
         if ($needsUpdating) {
+            Write-Host "🛰 Fetching all role assignment settings. This will take a few minutes."
+
             foreach ($roleObj in $myEligibleRoles) {
-                Write-Progress -Activity "Fetching settings assigned to roles" -Id 0
                 $counter++
                 $roleDefinitionId = $roleObj.RoleDefinitionId
-    
+
                 # An array where I keep adding the snippets
                 $searchSnippetsArray += "roleDefinitionId eq '$roleDefinitionId'"
+
+                Write-Progress -Activity "Fetching..." -Id 0 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
     
                 # In batches of 5, or if the counter has reached the end...
                 if ($counter % 5 -eq 0 -or $counter -ge $totalCount) {
@@ -154,7 +161,6 @@ function Enable-PIMRole {
                     $searchSnippet = $searchSnippetMain + $($searchSnippetsArray -join ' or ') + ")"
     
                     # Do the search
-                    Write-Progress -Activity "Fetching..." -ParentId 0 -Id 1 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
                     try {
                         $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -All -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
                     
@@ -171,15 +177,11 @@ function Enable-PIMRole {
                     $searchSnippetsArray = @()
                 }
             }
-
-            $script:policyAssignmentHashRoles = $policyAssignmentHashRoles
             
-            Write-Progress -Id 1 -Completed
+            Write-Progress -Id 0 -Completed
 
             # Fetching all the policies
-            Write-Progress -Activity "Fetching all policies" -Id 0
-            Start-Sleep -Milliseconds 200
-            Write-Progress -Activity "Fetching all policies" -Id 0
+            Write-Host "🛰 Fetching all role settings."
 
             try {
                 $policyObjsHashRoles = @{}
@@ -187,12 +189,13 @@ function Enable-PIMRole {
                 Get-MgPolicyRoleManagementPolicy -All -Filter "scopeId eq '/' and scopeType eq 'DirectoryRole'" -ExpandProperty Rules -ErrorAction Stop | ForEach-Object {
                     $policyObjsHashRoles[$($_.Id)] = $_
                 }
-                
-                $script:policyObjsHashRoles = $policyObjsHashRoles
 
             } catch {
-                throw "Error fetching all policies: $($_.Exception.Message)"
+                throw "Error fetching all the settings: $($_.Exception.Message)"
             }
+
+            $script:policyAssignmentHashRoles = $policyAssignmentHashRoles
+            $script:policyObjsHashRoles = $policyObjsHashRoles
 
             $script:lastUpdatedRoles = $currentTime  # Set the lastUpdated timestamp since we have successfully updated the cache
 
@@ -201,8 +204,6 @@ function Enable-PIMRole {
             $policyObjsHashRoles = $script:policyObjsHashRoles
 
         }
-        
-        Write-Progress -Id 0 -Completed
     }
 
     process {
@@ -228,7 +229,7 @@ function Enable-PIMRole {
 
             $timespanArray = @()
             $roleExpired = $false
-            $roleAssignmentType = "Not Active"
+            $roleAssignmentType = "Inactive"
 
             Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
@@ -370,7 +371,6 @@ function Enable-PIMRole {
                     }
                 }
 
-                # Just in case there's a delay between getting the states and when I calculate this...
                 $maxDuration = $maxDurationArray -join ' '
 
             } else {
@@ -413,25 +413,36 @@ function Enable-PIMRole {
             [pscustomobject][ordered]@{
                 "RoleName" = $roleName
                 "Status" = $roleAssignmentType
-                "ExpiresIn" = if (!($roleExpired)) { $timespanArray -join ' ' }
+                "ExpiresIn" = if (!($roleExpired)) {
+                    # Take only the topmost entry (day or hour in case of more than one)
+                    if ($timespanArray.Count -gt 1) {
+                        "~" + $timespanArray[0]
+                    } else {
+                        $timespanArray[0]
+                    }
+                    
+                } # Tweak the output to to save some space
+
                 "MaxDuration" = $maxDuration
                 "EnablementRules" = $enablementRule -join '|' -replace 'Justification','Reason' -replace 'Ticketing','Ticket' -replace 'MultiFactorAuthentication','MFA'
                 "Scope" = $roleScope
                 "More" = [pscustomobject]@{
-                    "RoleDefinitionId" = $roleObj.RoleDefinitionId
-                    "DirectoryScopeId" = $roleDirectoryScopeId
-                    "MaxDuration" = $expirationRule.maximumDuration
-                    "EnablementRule" = $enablementRule
-                    "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }
-                }
+                    "More" = [pscustomobject]@{
+                        "RoleDefinitionId" = $roleObj.RoleDefinitionId
+                        "DirectoryScopeId" = $roleDirectoryScopeId
+                        "MaxDuration" = $expirationRule.maximumDuration
+                        "EnablementRule" = $enablementRule
+                        "ActiveMinutes" = if (!($roleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }    
+                    }
+                } # Two levels to hide this and save some space
             }
         }
 
         Write-Progress -Completed -Id 0
 
-        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles"
+        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
 
-        # Lets ask for the required info upfront
+        # Let's ask for the required info upfront
         $justificationsHash = @{}
         $ticketSystemHash = @{}
         $ticketNumberHash = @{}
@@ -442,8 +453,8 @@ function Enable-PIMRole {
 
         $rolesWereDisabled = $false
         foreach ($selection in $userSelections) {
-            if ($selection.Status -ne "Not Active") {
-                if ($selection.More.ActiveMinutes -le 5) {
+            if ($selection.Status -ne "Inactive") {
+                if ($selection.More.More.ActiveMinutes -le 5) {
                     Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
@@ -455,8 +466,8 @@ function Enable-PIMRole {
                 $params = @{
                     Action = "selfDeactivate"
                     PrincipalId = $userId
-                    RoleDefinitionId = $selection.More.RoleDefinitionId
-                    DirectoryScopeId = $selection.More.DirectoryScopeId
+                    RoleDefinitionId = $selection.More.More.RoleDefinitionId
+                    DirectoryScopeId = $selection.More.More.DirectoryScopeId
                 }
 
                 try {
@@ -486,9 +497,9 @@ function Enable-PIMRole {
         foreach ($selection in $userSelections) {
             # Skip activating active roles that have been active for less than 5 mins
             # Coz we wouldn't have been able to disable them above to reactivate
-            if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
+            if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            if ($selection.More.EnablementRule -contains "Justification") {
+            if ($selection.More.More.EnablementRule -contains "Justification") {
                 Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 if ($SkipJustification) {
@@ -524,7 +535,7 @@ function Enable-PIMRole {
                 }
             }
 
-            if ($selection.More.EnablementRule -contains "Ticketing") {
+            if ($selection.More.More.EnablementRule -contains "Ticketing") {
                 Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
@@ -557,7 +568,7 @@ function Enable-PIMRole {
         foreach ($selection in $userSelections) {
             # Skip activating active roles that have been active for less than 5 mins
             # Coz we wouldn't have been able to disable them above to reactivate
-            if ($selection.Status -ne "Not Active" -and $selection.More.ActiveMinutes -le 5) { continue }
+            if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Enabling for $($selection.MaxDuration)"
@@ -565,23 +576,23 @@ function Enable-PIMRole {
             $params = @{
                 Action = "selfActivate"
                 PrincipalId = $userId
-                RoleDefinitionId = $selection.More.RoleDefinitionId
-                DirectoryScopeId = $selection.More.DirectoryScopeId
+                RoleDefinitionId = $selection.More.More.RoleDefinitionId
+                DirectoryScopeId = $selection.More.More.DirectoryScopeId
 
                 ScheduleInfo = @{
                     StartDateTime = Get-Date
                     Expiration = @{
                         Type = "AfterDuration"
-                        Duration = $selection.More.MaxDuration
+                        Duration = $selection.More.More.MaxDuration
                     }
                 }
             }
 
-            if ($selection.More.EnablementRule -contains "Justification") {
+            if ($selection.More.More.EnablementRule -contains "Justification") {
                 $params.Justification = $justificationsHash[$($selection.RoleName)]
             }
 
-            if ($selection.More.EnablementRule -contains "Ticketing") {
+            if ($selection.More.More.EnablementRule -contains "Ticketing") {
                 $params.TicketInfo = @{
                     TicketNumber = $ticketNumberHash[$($selection.RoleName)]
                     TicketSystem = $ticketSystemHash[$($selection.RoleName)]
@@ -643,6 +654,8 @@ function Enable-PIMRole {
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMRole {
     begin {
+        Write-Host ""
+        
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
@@ -703,7 +716,7 @@ function Disable-PIMRole {
 
             $timespanArray = @()
             $roleExpired = $false
-            $roleAssignmentType = "Not Active"
+            $roleAssignmentType = "Inactive"
 
             Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
@@ -779,13 +792,23 @@ function Disable-PIMRole {
             [pscustomobject][ordered]@{
                 "RoleName" = $roleName
                 "Status" = $roleAssignmentType
-                "ExpiresIn" = if (!($roleExpired)) { $timespanArray -join ' ' }
+                "ExpiresIn" = if (!($roleExpired)) {
+                    # Take only the topmost entry (day or hour in case of more than one)
+                    if ($timespanArray.Count -gt 1) {
+                        "~" + $timespanArray[0]
+                    } else {
+                        $timespanArray[0]
+                    }
+                    
+                } # Tweak the output to to save some space
                 "Scope" = $roleScope
                 "More" = [pscustomobject]@{
-                    "RoleDefinitionId" = $roleObj.RoleDefinitionId
-                    "DirectoryScopeId" = $roleObj.DirectoryScopeId
-                    "ActiveMinutes" = (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes
-                }
+                    "More" = [pscustomobject]@{
+                        "RoleDefinitionId" = $roleObj.RoleDefinitionId
+                        "DirectoryScopeId" = $roleObj.DirectoryScopeId
+                        "ActiveMinutes" = (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeRoleObj.ScheduleInfo.StartDateTime).TotalMinutes
+                    }
+                    }  # Two levels to hide this and save some space
             }
         }
 
@@ -801,7 +824,7 @@ function Disable-PIMRole {
         $requestObjsArray = @()
 
         foreach ($selection in $userSelections) {
-            if ($selection.More.ActiveMinutes -le 5) {
+            if ($selection.More.More.ActiveMinutes -le 5) {
                 Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
@@ -813,8 +836,8 @@ function Disable-PIMRole {
             $params = @{
                 Action = "selfDeactivate"
                 PrincipalId = $userId
-                RoleDefinitionId = $selection.More.RoleDefinitionId
-                DirectoryScopeId = $selection.More.DirectoryScopeId
+                RoleDefinitionId = $selection.More.More.RoleDefinitionId
+                DirectoryScopeId = $selection.More.More.DirectoryScopeId
             }
 
             try {
@@ -853,6 +876,562 @@ function Disable-PIMRole {
                 "Name" = "Role";
                 "Expression" = { $roleDefinitionsCache[$($_.RoleDefinitionId)] }
             },Status 
+        }
+
+        $finalOutput | Format-Table
+    }
+}
+
+function Enable-PIMGroup {
+    param(
+        [Parameter(Mandatory=$false)]
+        [Alias("SkipReason")]
+        [switch]$SkipJustification,
+
+        [Parameter(Mandatory=$false)]
+        [Alias("Reason")]
+        [string]$Justification,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TicketingSystem,
+
+        [switch]$RefreshEligibleGroups
+    )
+
+    <#
+    .DESCRIPTION
+    Enable Entra ID PIM groups via an easy to use TUI (Text User Interface). Only supports enabling; not disabling. Use Disable-PIMGroup to disable.
+
+    If a group needs a reason/ justification you can either enter one, or press enter to go with "xxx", or type something and end with * to use it for all the activations.
+
+    .PARAMETER SkipJustification
+    Optional. If specified, it sets the reason/ justifaction for activation to be "xxx".
+
+    .PARAMETER Justification
+    Optional. If specified, it sets the reason/ justifaction for activation to whatever is input.
+
+    .PARAMETER TicketingSystem
+    Optional. If specified, it sets the tickting system (for group activations that need a ticket number) to be whatever is input.
+
+    .PARAMETER RefreshEligibleGroups
+    Optional. By default, eligible groups are only checked if it's been more than 30 mins since the last invocation. If you want to check before that, use this switch. 
+    #>
+
+    begin {
+        Write-Host ""
+
+        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+        [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+
+        if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
+            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+        }
+
+        try {
+            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+
+        } catch {
+            throw "$($_.Exception.Message)"
+        }
+
+        $context = Get-MgContext
+
+        $scopes = $context.scopes
+
+        if ($scopes -notcontains "Directory.ReadWrite.All") {
+            foreach ($requiredScope in $script:requiredScopesArray) {
+                if ($requiredScope -notin $scopes) {
+                    Write-Warning "Required scope '$requiredScope' missing"
+                }
+            }
+        }
+
+        $userId = (Get-MgUser -UserId $context.Account).Id
+
+        if ($RefreshEligibleGroups) {
+            $needsUpdating = $true
+
+        } else {
+            # Only pull in the eligible Groups if needed; else use the cached info
+            $currentTime = (Get-Date).ToUniversalTime()
+            $lastUpdatedGroups = $script:lastUpdatedGroups
+
+            if ($null -ne $lastUpdatedGroups) {
+                $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdatedGroups -End $currentTime
+            
+                if ($lastUpdatedTimespan.TotalHours -gt 8) {
+                    $needsUpdating = $true
+                
+                } else {
+                    $needsUpdating = $false
+                    if ($lastUpdatedTimespan.TotalHours -eq 1) {
+                        $minutes = "an hour"
+
+                    } elseif ($lastUpdatedTimespan.TotalHours -eq 0) {
+                        if ($lastUpdatedTimespan.TotalMinutes -eq 1) {
+                            $minutes = "a minute"
+    
+                        } else {
+                            $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minutes"
+                        }
+                    } 
+                    else {
+                        $minutes = "$([int]$lastUpdatedTimespan.TotalHours) hours"
+                    }
+                }
+        
+            } else {
+                $needsUpdating = $true
+            }
+        }
+
+        try {
+            if ($needsUpdating) {
+                Write-Host "🚀 Fetching all eligible & active Entra ID groups. This will take a few minutes."
+
+                Write-Progress -Activity "Fetching all eligible Entra ID groups" -Id 0
+                [array]$myEligibleGroups = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilitySchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
+                [array]$script:myEligibleGroups = $myEligibleGroups
+
+            } else {
+                Write-Host "⏳ Not fetching eligible Entra ID groups & their policies as it has only been $minutes since we last checked."
+                Write-Host "🫵 You can re-run with the -RefreshEligibleGroups switch to force a refresh."
+                [array]$myEligibleGroups = $script:myEligibleGroups
+            }
+
+            Write-Progress -Activity "Fetching all active Entra ID groups" -Id 0
+            [array]$myActiveGroups = Get-MgIdentityGovernancePrivilegedAccessGroupAssignmentSchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
+            
+        } catch {
+            throw "Error fetching groups: $($_.Exception.Message)"
+        }
+
+        Write-Progress -Id 0 -Completed
+
+        # Create a cache of assignments. This is faster as I can lookup a bunch of them beforehand.
+        $policyAssignmentHashGroupsOwner = @{}
+        $policyAssignmentHashGroupsMember = @{}
+        # The scopeId is the groupId, so I add this on later
+        $searchSnippetMain = "scopeType eq 'Group' and "
+        
+        # Filter has a max length (not sure what) so I will do it in batches of 5. 
+        # A temp variable I keep incrementing
+        $counter = 0
+        # Total number of entries for this scope
+        $totalCount = $myEligibleGroups.Count
+
+        # Loop through the entries
+        # Below doesn't work... loop through each group & do accessId member and owner
+        if ($needsUpdating) {
+            Write-Host "🛰 Fetching all group settings. This will take a few minutes."
+
+            foreach ($groupRoleObj in $myEligibleGroups) {
+                $counter++
+                $groupId = $groupRoleObj.GroupId
+
+                $searchSnippet = $searchSnippetMain + "scopeId eq '$groupId'"
+    
+                Write-Progress -Activity "$($groupRoleObj.Group.DisplayName)" -Id 0 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
+                
+                # Do the search
+                try {
+                    $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -All -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
+                
+                } catch {
+                    throw "Error fetching settings assignments: $($_.Exception.Message)"
+                }
+                
+                # And add it to the hash. There are two results - member and owner
+                foreach ($result in $policyAssignment) {
+                    if ($result.RoleDefinitionId -eq "member") {
+                        $policyAssignmentHashGroupsMember[$groupId] = $result
+
+                    } elseif ($result.RoleDefinitionId -eq "owner") {
+                        $policyAssignmentHashGroupsOwner[$groupId] = $result
+
+                    }
+                }
+            }
+
+            $script:policyAssignmentHashGroupsOwner = $policyAssignmentHashGroupsOwner
+            $script:policyAssignmentHashGroupsMember = $policyAssignmentHashGroupsMember
+
+            $script:lastUpdatedGroups = $currentTime  # Set the lastUpdated timestamp since we have successfully updated the cache
+
+        } else {
+            $policyAssignmentHashGroupsOwner = $script:policyAssignmentHashGroupsOwner
+            $policyAssignmentHashGroupsMember = $script:policyAssignmentHashGroupsMember
+
+        }
+        
+        Write-Progress -Id 0 -Completed
+    }
+
+    process {
+        Write-Host ""
+
+        $defaultJustification = "xxx"
+
+        # I use these for showing progress
+        [int]$counter = 0
+        [int]$totalCount = $myEligibleGroups.Count
+        $groupNamesCache = @{}
+
+        $groupStates = foreach ($groupRoleObj in $myEligibleGroups) {
+            $counter++
+            $percentageComplete = ($counter/$totalCount)*100
+
+            $groupId = $groupRoleObj.GroupId
+            $groupName = $groupRoleObj.Group.DisplayName
+            $groupNamesCache[$groupId] = $groupName
+
+            $accessId = $groupRoleObj.AccessId
+
+            $timespanArray = @()
+            $groupRoleExpired = $false
+            $groupRoleAssignmentType = "Inactive"
+
+            Write-Progress -Activity "Processing group '$groupName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+
+            $activeGroupRoleObj = $null
+            $activeGroupRoleObj = $myActiveGroups | Where-Object { $_.GroupId -eq "$groupId" -and $_.AccessId -eq "$accessId" }
+
+            if ($activeGroupRoleObj) {
+                Write-Progress -Activity "Group is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+                Write-Progress -Activity "o is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                
+                # Double checking coz during my testing I ran into instances where this was sometimes incomplete
+                if ($activeGroupRoleObj.ScheduleInfo.Expiration.EndDateTime) {
+                    $groupRoleAssignmentType = "Active"
+
+                    $timeSpan = New-TimeSpan -Start (Get-Date).ToUniversalTime() -End $activeGroupRoleObj.ScheduleInfo.Expiration.EndDateTime
+                    if ($timeSpan.Days -gt 0) {
+                        if ($timeSpan.Days -eq 1) {
+                            $timespanArray += "$($timeSpan.Days) day"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Days) days"
+                        }
+                    }
+    
+                    if ($timeSpan.Hours -gt 0) {
+                        if ($timeSpan.Hours -eq 1) {
+                            $timespanArray += "$($timeSpan.Hours) hour"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Hours) hours"
+                        }
+                    }
+    
+                    if ($timeSpan.Minutes -gt 0) {
+                        if ($timeSpan.Minutes -eq 1) {
+                            $timespanArray += "$($timeSpan.Minutes) minute"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Minutes) minutes"
+                        }
+                    }
+    
+                    # Just in case there's a delay between getting the states and when I calculate this...
+                    if ($timeSpan.Ticks -lt 0) { 
+                        $groupRoleExpired = $true 
+                    }
+
+                } else {
+                    $groupRoleExpired = $true 
+                }
+
+                Write-Progress -Id 1 -Completed
+
+            } else {
+                $groupRoleExpired = $true
+            }
+
+            # Using the roledefinitionid, find the policy assignment on this role
+            # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyassignment?view=graph-rest-1.0
+            
+            $policyAssignment = if ($accessId -eq "member") { $policyAssignmentHashGroupsMember[$groupId] } else { $policyAssignmentHashGroupsOwner[$groupId] }
+            $policyObj = $policyAssignment.Policy
+
+            # The policy is what defines the max duration of the role and other factors. We are interested in here are the rules
+            # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyrule?view=graph-rest-1.0
+            
+            # The 'Expiration_EndUser_Assignment' rule in the policy is what defines the maximum duration
+            # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicyexpirationrule?view=graph-rest-1.0
+            $expirationRule = ($policyObj.Rules | Where-Object { $_.Id -eq "Expiration_EndUser_Assignment" }).AdditionalProperties
+
+            if ($expirationRule.maximumDuration -match "^PT") {
+                # Thanks https://stackoverflow.com/a/57296616
+                $timeSpan = [System.Xml.XmlConvert]::ToTimeSpan($expirationRule.maximumDuration)
+                
+                $maxDurationArray = @()
+
+                if ($timeSpan.Days -gt 0) {
+                    if ($timeSpan.Days -eq 1) {
+                        $maxDurationArray += "$($timeSpan.Days) day"
+
+                    } else {
+                        $maxDurationArray += "$($timeSpan.Days) days"
+                    }
+                }
+
+                if ($timeSpan.Hours -gt 0) {
+                    if ($timeSpan.Hours -eq 1) {
+                        $maxDurationArray += "$($timeSpan.Hours) hour"
+
+                    } else {
+                        $maxDurationArray += "$($timeSpan.Hours) hours"
+                    }
+                }
+
+                if ($timeSpan.Minutes -gt 0) {
+                    if ($timeSpan.Minutes -eq 1) {
+                        $maxDurationArray += "$($timeSpan.Minutes) minute"
+
+                    } else {
+                        $maxDurationArray += "$($timeSpan.Minutes) minutes"
+                    }
+                }
+
+                $maxDuration = $maxDurationArray -join ' '
+
+            } else {
+                $maxDuration = $expirationRule.maximumDuration
+            }
+
+            # Repeat, but for the enablement rules
+            $enablementRule = ($policyObj.Rules | Where-Object { $_.Id -eq "Enablement_EndUser_Assignment" }).AdditionalProperties.enabledRules
+
+            Write-Progress -Completed -Id 1
+
+            [pscustomobject][ordered]@{
+                "GroupName" = $groupName
+                "Status" = $groupRoleAssignmentType
+                "Type" = if ($accessId -eq "member") { "Member" } else { "Owner" }
+                "ExpiresIn" = if (!($groupRoleExpired)) {
+                    # Take only the topmost entry (day or hour in case of more than one)
+                    if ($timespanArray.Count -gt 1) {
+                        "~" + $timespanArray[0]
+                    } else {
+                        $timespanArray[0]
+                    }
+                    
+                } # Tweak the output to to save some space
+
+                "MaxDuration" = $maxDuration
+                "EnablementRules" = $enablementRule -join '|' -replace 'Justification','Reason' -replace 'Ticketing','Ticket' -replace 'MultiFactorAuthentication','MFA'
+                "More" = [pscustomobject]@{
+                    "More" = [pscustomobject]@{
+                        "AccessId" = $accessId
+                        "GroupId" = $groupRoleObj.GroupId
+                        "MaxDuration" = $expirationRule.maximumDuration
+                        "EnablementRule" = $enablementRule
+                        "ActiveMinutes" = if (!($groupRoleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeGroupRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }
+                    }
+                }  # Two levels to hide this and save some space
+            }
+        }
+
+        Write-Progress -Completed -Id 0
+
+        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
+
+        # Let's ask for the required info upfront
+        $justificationsHash = @{}
+        $ticketSystemHash = @{}
+        $ticketNumberHash = @{}
+
+        # I use this for tidying up some of the output later; find the longest entry in the selections
+        $longestRoleLength = ($userSelections.GroupName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
+
+        $groupsWereDisabled = $false
+        foreach ($selection in $userSelections) {
+            if ($selection.Status -ne "Inactive") {
+                if ($selection.More.More.ActiveMinutes -le 5) {
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+                    Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
+                    continue
+                }
+
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+                Write-Host "Disabling group (so we can enable it again)"
+
+                $params = @{
+                    accessId = $selection.More.More.AccessId
+                    action = "selfDeactivate"
+                    principalId = $userId
+                    groupId = $selection.More.More.GroupId
+                }
+
+                try {
+                    $requestObj = New-MgIdentityGovernancePrivilegedAccessGroupAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+                
+                    $groupsWereDisabled = $true
+            
+                } catch {
+                    Write-Error "Error deactivating '$($selection.GroupName)': $($_.Exception.Message)"
+                }
+            }
+        }
+
+        if ($groupsWereDisabled) {
+            $counter = 0
+            $maxWaitSecs = 20
+            while ($counter -lt $maxWaitSecs) {
+                Write-Progress "Waiting $maxWaitSecs seconds before continuing" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Start-Sleep -Seconds 1
+                $counter++
+            }
+
+            Write-Progress -Completed
+            Write-Host ""
+        }
+
+        foreach ($selection in $userSelections) {
+            # Skip activating active roles that have been active for less than 5 mins
+            # Coz we wouldn't have been able to disable them above to reactivate
+            if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
+
+            if ($selection.More.More.EnablementRule -contains "Justification") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+
+                if ($SkipJustification) {
+                    $justificationsHash[$($selection.GroupName)] = "$defaultJustification"
+                    Write-Host "Reason will be set to: $defaultJustification"
+
+                } elseif ($Justification.Length -ne 0) {
+                    $justificationsHash[$($selection.GroupName)] = $Justification
+                    Write-Host "Reason will be set to: $Justification"
+
+                } else {
+                    $justificationInput = Read-Host "Please provide a reason"
+                
+                    # If the justitication ends with an asterisk or is empty, use it for everything else that follows...
+                    if ($justificationInput -match '\*$' -or $justificationInput.Length -eq 0) {
+                        # First, remove the asterisk
+                        $justificationInput = $justificationInput -replace '\*$',''
+
+                        # Then check whether anything remains. This is to cater to situations where someone enters * or *** etc. 
+                        # If after removing the asterisk there's nothing, then set it to $defaultJustification for all. This is basically equivalent to -SkipJustification
+                        if ($justificationInput.Length -eq 0) {
+                            $justificationInput = "$defaultJustification"
+                            $justificationsHash[$($selection.GroupName)] = $justificationInput
+                        }
+                        
+                        # Set the justification for everything that follows to be this
+                        $Justification = $justificationInput
+                        $justificationsHash[$($selection.GroupName)] = $justificationInput
+
+                    } else {
+                        $justificationsHash[$($selection.GroupName)] = $justificationInput
+                    }
+                }
+            }
+
+            if ($selection.More.More.EnablementRule -contains "Ticketing") {
+                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+
+                $ticketNumberHash[$($selection.GroupName)] = Read-Host "Please provide a ticket number"
+
+                if ($TicketingSystem.Length -ne 0) {
+                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+                    $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
+
+                    # If the justitication ends with an asterisk, use it for everything else that follows...
+                    if ($ticketingSystemInput -match '\*$') {
+                        $ticketingSystemInput = $ticketingSystemInput -replace '\*$',''
+                        $TicketingSystem = $ticketingSystemInput
+                    }
+
+                    $ticketSystemHash[$($selection.GroupName)] = $ticketingSystemInput
+
+                } else {
+                    $ticketSystemHash[$($selection.GroupName)] = $TicketingSystem
+                }
+            }
+        }
+
+        if ($userSelections.Count -ne 0) {
+            Write-Host ""
+        }
+
+        # An array to capture each of the items we action below
+        $requestObjsArray = @()
+
+        foreach ($selection in $userSelections) {
+            # Skip activating active roles that have been active for less than 5 mins
+            # Coz we wouldn't have been able to disable them above to reactivate
+            if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
+
+            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+            Write-Host "Enabling for $($selection.MaxDuration)"
+
+            $params = @{
+                accessId = $selection.More.More.AccessId
+                action = "selfActivate"
+                principalId = $userId
+                groupId = $selection.More.More.GroupId
+
+                scheduleInfo = @{
+                    startDateTime = Get-Date
+                    expiration = @{
+                        type = "AfterDuration"
+                        duration = $selection.More.More.MaxDuration
+                    }
+                }
+            }
+
+            if ($selection.More.More.enablementRule -contains "Justification") {
+                $params.justification = $justificationsHash[$($selection.GroupName)]
+            }
+
+            if ($selection.More.More.enablementRule -contains "Ticketing") {
+                $params.ticketInfo = @{
+                    ticketNumber = $ticketNumberHash[$($selection.GroupName)]
+                    ticketSystem = $ticketSystemHash[$($selection.GroupName)]
+                }
+            }
+
+            try {
+                $requestObj = New-MgIdentityGovernancePrivilegedAccessGroupAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+            
+                # And add it to an array so we can loop over in the end
+                $requestObjsArray += $requestObj
+        
+            } catch {
+                Write-Error "Error activating '$($selection.GroupName)': $($_.Exception.Message)"
+            }
+        }
+
+        if ($requestObjsArray.Count -ne 0) {
+            Write-Host ""
+
+            $counter = 0
+            $maxWaitSecs = 20
+            while ($counter -lt $maxWaitSecs) {
+                Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Start-Sleep -Seconds 1
+                $counter++
+            }
+
+            Write-Progress -Completed
+        }
+
+        $counter = 0
+        $totalCount = $requestObjsArray.Count
+
+        $finalOutput = foreach ($requestObj in $requestObjsArray) {
+            $counter++
+            Write-Progress "Fetching status of group '$($groupNamesCache[$($requestObj.GroupId)])'" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            
+            Get-MgIdentityGovernancePrivilegedAccessGroupAssignmentScheduleRequest -PrivilegedAccessGroupAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
+                "Name" = "Group";
+                "Expression" = { $groupNamesCache[$($_.GroupId)] }
+            }, @{
+                "Name" = "Type";
+                "Expression" = { if ($_.AccessId -eq "member") { "Member" } else { "Owner" } }
+            }, Status 
         }
 
         $finalOutput | Format-Table

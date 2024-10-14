@@ -46,3 +46,7 @@ Wait a bit for it to show the final status.
 That's it! 
 
 Way faster than the Entra ID portal. And moreover, you can select more than 1 role at a go. 
+
+## API reference
+- [PIM for Entra roles](https://learn.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagementv3-overview?view=graph-rest-1.0) 
+- [PIM for Groups](https://learn.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagement-for-groups-api-overview?view=graph-rest-1.0).
