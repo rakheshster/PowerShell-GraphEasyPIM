@@ -1,3 +1,5 @@
+# Common variables
+## The scopes that we need. Identified these from the Graph API docs + while testing. 
 $requiredScopesArrayRoles = @("RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory",
                                 "RoleManagement.Read.Directory","RoleManagement.Read.All","RoleManagement.ReadWrite.Directory",
                                 "RoleAssignmentSchedule.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
@@ -9,6 +11,16 @@ $requiredScopesArrayGroups = @("PrivilegedEligibilitySchedule.Read.AzureADGroup"
 )
 
 $requiredScopesArray = $requiredScopesArrayRoles + $requiredScopesArrayGroups
+
+# Thanks https://www.pdq.com/blog/change-powershell-colors/ for showing me where to get these colors
+$colorParams = @{}
+if ($host.PrivateData.VerboseForegroundColor -ne "-1") {
+    $colorParams.ForegroundColor = $host.PrivateData.VerboseForegroundColor
+}
+
+if ($host.PrivateData.VerboseBackgroundColor -ne "-1") {
+    $colorParams.BackgroundColor = $host.PrivateData.VerboseBackgroundColor
+}
 
 function Enable-PIMRole {
     param(
@@ -48,12 +60,13 @@ function Enable-PIMRole {
 
     begin {
         Write-Host ""
+        $colorParams = $script:colorParams
 
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
         if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
-            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+            Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
         try {
@@ -108,15 +121,15 @@ function Enable-PIMRole {
 
         try {
             if ($needsUpdating) {
-                Write-Host "🥷 Fetching all eligible & active Entra ID roles. This will take a few minutes."
+                Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID roles. This will take a few minutes."
 
                 Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
                 [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
                 [array]$script:myEligibleRoles = $myEligibleRoles
 
             } else {
-                Write-Host "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
-                Write-Host "🫵 You can re-run with the -RefreshEligibleRoles switch to force a refresh."
+                Write-Host @colorParams "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
+                Write-Host @colorParams "🫵 You can re-run with the -RefreshEligibleRoles switch to force a refresh."
                 [array]$myEligibleRoles = $script:myEligibleRoles
             }
 
@@ -144,7 +157,7 @@ function Enable-PIMRole {
 
         # Loop through the entries
         if ($needsUpdating) {
-            Write-Host "🚀 Fetching all role assignment settings. This will take a few minutes."
+            Write-Host @colorParams "🚀 Fetching all role assignment settings. This will take a few minutes."
 
             foreach ($roleObj in $myEligibleRoles) {
                 $counter++
@@ -181,7 +194,7 @@ function Enable-PIMRole {
             Write-Progress -Id 0 -Completed
 
             # Fetching all the policies
-            Write-Host "🧙 Fetching all role settings."
+            Write-Host @colorParams "🧙 Fetching all role settings."
 
             try {
                 $policyObjsHashRoles = @{}
@@ -421,7 +434,6 @@ function Enable-PIMRole {
                     } else {
                         $timespanArray[0]
                     }
-                    
                 } # Tweak the output to to save some space
 
                 "MaxDuration" = $maxDuration
@@ -456,13 +468,13 @@ function Enable-PIMRole {
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
-                    Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
+                    Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host @colorParams "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
-                Write-Host "Disabling role (so we can enable it again)"
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host @colorParams "Disabling role (so we can enable it again)"
 
                 $params = @{
                     Action = "selfDeactivate"
@@ -501,15 +513,15 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.RoleName)] = "$defaultJustification"
-                    Write-Host "Reason will be set to: $defaultJustification"
+                    Write-Host @colorParams "Reason will be set to: $defaultJustification"
 
                 } elseif ($Justification.Length -ne 0) {
                     $justificationsHash[$($selection.RoleName)] = $Justification
-                    Write-Host "Reason will be set to: $Justification"
+                    Write-Host @colorParams "Reason will be set to: $Justification"
 
                 } else {
                     $justificationInput = Read-Host "Please provide a reason"
@@ -537,12 +549,12 @@ function Enable-PIMRole {
             }
 
             if ($selection.More.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  📋  " -f $($selection.RoleName), $($selection.Scope))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -571,8 +583,8 @@ function Enable-PIMRole {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
-            Write-Host "Enabling for $($selection.MaxDuration)"
+            Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host @colorParams "Enabling for $($selection.MaxDuration)"
 
             $params = @{
                 Action = "selfActivate"
@@ -656,12 +668,13 @@ function Enable-PIMRole {
 function Disable-PIMRole {
     begin {
         Write-Host ""
+        $colorParams = $script:colorParams
         
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
         if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
-            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+            Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
         try {
@@ -686,6 +699,8 @@ function Disable-PIMRole {
         $userId = (Get-MgUser -UserId $context.Account).Id
 
         try {
+            Write-Host @colorParams "🥷 Fetching all active Entra ID roles. This should be pretty quick!"
+
             Write-Progress -Activity "Fetching all active Entra ID roles" -Id 0
             [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
             
@@ -801,8 +816,8 @@ function Disable-PIMRole {
                     } else {
                         $timespanArray[0]
                     }
-                    
                 } # Tweak the output to to save some space
+
                 "Scope" = $roleScope
                 "More" = [pscustomobject]@{
                     "More" = [pscustomobject]@{
@@ -827,13 +842,13 @@ function Disable-PIMRole {
 
         foreach ($selection in $userSelections) {
             if ($selection.More.More.ActiveMinutes -le 5) {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
-                Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host @colorParams "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
             }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
-            Write-Host "Disabling role"
+            Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength} [{1,-$longestScopeLength}]  👉  " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host @colorParams "Disabling role"
 
             $params = @{
                 Action = "selfDeactivate"
@@ -921,12 +936,13 @@ function Enable-PIMGroup {
 
     begin {
         Write-Host ""
+        $colorParams = $script:colorParams
 
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
         if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
-            Write-Host "🎉 A newer version of this module is available in PowerShell Gallery"
+            Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
         try {
@@ -989,15 +1005,15 @@ function Enable-PIMGroup {
 
         try {
             if ($needsUpdating) {
-                Write-Host "🥷 Fetching all eligible & active Entra ID groups. This will take a few minutes."
+                Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID groups. This will take a few minutes."
 
                 Write-Progress -Activity "Fetching all eligible Entra ID groups" -Id 0
                 [array]$myEligibleGroups = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilitySchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
                 [array]$script:myEligibleGroups = $myEligibleGroups
 
             } else {
-                Write-Host "⏳ Not fetching eligible Entra ID groups & their policies as it has only been $minutes since we last checked."
-                Write-Host "🫵 You can re-run with the -RefreshEligibleGroups switch to force a refresh."
+                Write-Host @colorParams "⏳ Not fetching eligible Entra ID groups & their policies as it has only been $minutes since we last checked."
+                Write-Host @colorParams "🫵 You can re-run with the -RefreshEligibleGroups switch to force a refresh."
                 [array]$myEligibleGroups = $script:myEligibleGroups
             }
 
@@ -1025,7 +1041,7 @@ function Enable-PIMGroup {
         # Loop through the entries
         # Below doesn't work... loop through each group & do accessId member and owner
         if ($needsUpdating) {
-            Write-Host "🧙 Fetching all group settings. This will take a few minutes."
+            Write-Host @colorParams "🧙 Fetching all group settings. This will take a few minutes."
 
             foreach ($groupRoleObj in $myEligibleGroups) {
                 $counter++
@@ -1218,7 +1234,6 @@ function Enable-PIMGroup {
                     } else {
                         $timespanArray[0]
                     }
-                    
                 } # Tweak the output to to save some space
 
                 "MaxDuration" = $maxDuration
@@ -1251,13 +1266,13 @@ function Enable-PIMGroup {
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
-                    Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
+                    Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+                    Write-Host @colorParams "Cannot disable the group as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
-                Write-Host "Disabling group (so we can enable it again)"
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+                Write-Host @colorParams "Disabling group (so we can enable it again)"
 
                 $params = @{
                     accessId = $selection.More.More.AccessId
@@ -1296,15 +1311,15 @@ function Enable-PIMGroup {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.GroupName)] = "$defaultJustification"
-                    Write-Host "Reason will be set to: $defaultJustification"
+                    Write-Host @colorParams "Reason will be set to: $defaultJustification"
 
                 } elseif ($Justification.Length -ne 0) {
                     $justificationsHash[$($selection.GroupName)] = $Justification
-                    Write-Host "Reason will be set to: $Justification"
+                    Write-Host @colorParams "Reason will be set to: $Justification"
 
                 } else {
                     $justificationInput = Read-Host "Please provide a reason"
@@ -1332,12 +1347,12 @@ function Enable-PIMGroup {
             }
 
             if ($selection.More.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
 
                 $ticketNumberHash[$($selection.GroupName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  📋  " -f $($selection.GroupName))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -1366,8 +1381,8 @@ function Enable-PIMGroup {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline -ForegroundColor Yellow ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
-            Write-Host "Enabling for $($selection.MaxDuration)"
+            Write-Host -NoNewline @colorParams ("{0,-$longestRoleLength}  👉  " -f $($selection.GroupName))
+            Write-Host @colorParams "Enabling for $($selection.MaxDuration)"
 
             $params = @{
                 accessId = $selection.More.More.AccessId
@@ -1438,4 +1453,9 @@ function Enable-PIMGroup {
 
         $finalOutput | Format-Table
     }
+}
+
+# TBD
+function Disable-PIMGroup {
+
 }
