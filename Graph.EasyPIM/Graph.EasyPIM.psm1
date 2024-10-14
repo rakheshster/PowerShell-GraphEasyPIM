@@ -173,6 +173,8 @@ function Enable-PIMRole {
             }
 
             $script:policyAssignmentHashRoles = $policyAssignmentHashRoles
+            
+            Write-Progress -Id 1 -Completed
 
             # Fetching all the policies
             Write-Progress -Activity "Fetching all policies" -Id 0
@@ -200,9 +202,6 @@ function Enable-PIMRole {
 
         }
         
-        # I tried to do the same for policies & rules, but couldn't get it working... I can't seem to filter on PolicyId or policyId or any other variants!
-
-        Write-Progress -Id 1 -Completed
         Write-Progress -Id 0 -Completed
     }
 
