@@ -1,3 +1,15 @@
+$requiredScopesArrayRoles = @("RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory",
+                                "RoleManagement.Read.Directory","RoleManagement.Read.All","RoleManagement.ReadWrite.Directory",
+                                "RoleAssignmentSchedule.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
+)
+
+$requiredScopesArrayGroups = @("PrivilegedEligibilitySchedule.Read.AzureADGroup","PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup",
+                                "PrivilegedAccess.Read.AzureADGroup","PrivilegedAccess.ReadWrite.AzureADGroup",
+                                "RoleManagementPolicy.Read.AzureADGroup"
+)
+
+$requiredScopesArray = $requiredScopesArrayRoles + $requiredScopesArrayGroups
+
 function Enable-PIMRole {
     param(
         [Parameter(Mandatory=$false)]
@@ -16,7 +28,7 @@ function Enable-PIMRole {
 
     <#
     .DESCRIPTION
-    Enable Entra ID PIM roles via an easy to use TUI (Text User Interface). Only supports enabling; not disabling.
+    Enable Entra ID PIM roles via an easy to use TUI (Text User Interface). Only supports enabling; not disabling. Use Disable-PIMRole to disable.
 
     If a role needs a reason/ justification you can either enter one, or press enter to go with "xxx", or type something and end with * to use it for all the activations.
 
@@ -35,8 +47,6 @@ function Enable-PIMRole {
     #>
 
     begin {
-        $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
-
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
@@ -45,7 +55,7 @@ function Enable-PIMRole {
         }
 
         try {
-            Connect-MgGraph -Scopes $requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
 
         } catch {
             throw "$($_.Exception.Message)"
@@ -56,7 +66,7 @@ function Enable-PIMRole {
         $scopes = $context.scopes
 
         if ($scopes -notcontains "Directory.ReadWrite.All") {
-            foreach ($requiredScope in $requiredScopesArray) {
+            foreach ($requiredScope in $script:requiredScopesArray) {
                 if ($requiredScope -notin $scopes) {
                     Write-Warning "Required scope '$requiredScope' missing"
                 }
@@ -71,10 +81,10 @@ function Enable-PIMRole {
         } else {
             # Only pull in the eligible roles if needed; else use the cached info
             $currentTime = (Get-Date).ToUniversalTime()
-            $lastUpdated = $script:lastUpdated
+            $lastUpdatedRoles = $script:lastUpdatedRoles
 
-            if ($null -ne $lastUpdated) {
-                $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdated -End $currentTime
+            if ($null -ne $lastUpdatedRoles) {
+                $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdatedRoles -End $currentTime
             
                 if ($lastUpdatedTimespan.TotalMinutes -gt 30) {
                     $needsUpdating = $true
@@ -99,7 +109,6 @@ function Enable-PIMRole {
                 Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
                 [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
                 [array]$script:myEligibleRoles = $myEligibleRoles
-                $script:lastUpdated = $currentTime
 
             } else {
                 Write-Host "⏳ Not fetching eligible Entra ID roles & their policies as it has only been $minutes since we last checked."
@@ -118,7 +127,7 @@ function Enable-PIMRole {
 
         # Create a cache of assignments. This is faster as I can lookup a bunch of them beforehand.
         # All roles have the same policy (settings) assigned to them. And a user could have the same role assigned in more than one way - e.g. various admin units. 
-        $policyAssignmentHash = @{}
+        $policyAssignmentHashRoles = @{}
         # I must set scopeId to '/' coz if I search for a specific scopeId it errors: Attempted to perform an unauthorized operation.
         $searchSnippetMain = "scopeType eq 'DirectoryRole' and scopeId eq '/' and ("
         $searchSnippetsArray = @()
@@ -147,7 +156,7 @@ function Enable-PIMRole {
                     # Do the search
                     Write-Progress -Activity "Fetching..." -ParentId 0 -Id 1 -Status "${counter}/${totalCount}" -PercentComplete $($counter*100/$totalCount)
                     try {
-                        $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
+                        $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -All -Filter $searchSnippet -ExpandProperty "policy(`$expand=rules)" -ErrorAction Stop
                     
                     } catch {
                         throw "Error fetching settings assignments: $($_.Exception.Message)"
@@ -155,7 +164,7 @@ function Enable-PIMRole {
                     
                     # And add it to the hash
                     foreach ($result in $policyAssignment) {
-                        $policyAssignmentHash[$($result.RoleDefinitionId)] = $result
+                        $policyAssignmentHashRoles[$($result.RoleDefinitionId)] = $result
                     }
     
                     # Initialize the array again
@@ -163,13 +172,31 @@ function Enable-PIMRole {
                 }
             }
 
-            $script:policyAssignmentHash = $policyAssignmentHash
-            $script:policyObjsHash = @{}    # Initialize this hash table for later (this is updated in the loop below)
-            $policyObjsHash = @{}   # Initialize this hash table for later (this is updated in the loop below)
+            $script:policyAssignmentHashRoles = $policyAssignmentHashRoles
+
+            # Fetching all the policies
+            Write-Progress -Activity "Fetching all policies" -Id 0
+            Start-Sleep -Milliseconds 200
+            Write-Progress -Activity "Fetching all policies" -Id 0
+
+            try {
+                $policyObjsHashRoles = @{}
+
+                Get-MgPolicyRoleManagementPolicy -All -Filter "scopeId eq '/' and scopeType eq 'DirectoryRole'" -ExpandProperty Rules -ErrorAction Stop | ForEach-Object {
+                    $policyObjsHashRoles[$($_.Id)] = $_
+                }
+                
+                $script:policyObjsHashRoles = $policyObjsHashRoles
+
+            } catch {
+                throw "Error fetching all policies: $($_.Exception.Message)"
+            }
+
+            $script:lastUpdatedRoles = $currentTime  # Set the lastUpdated timestamp since we have successfully updated the cache
 
         } else {
-            $policyAssignmentHash = $script:policyAssignmentHash
-            $policyObjsHash = $script:policyObjsHash
+            $policyAssignmentHashRoles = $script:policyAssignmentHashRoles
+            $policyObjsHashRoles = $script:policyObjsHashRoles
 
         }
         
@@ -189,8 +216,6 @@ function Enable-PIMRole {
         # I use these for showing progress
         [int]$counter = 0
         [int]$totalCount = $myEligibleRoles.Count
-
-        [array]$myActiveRoleIds = $myActiveRoles.RoleDefinitionId
 
         $roleStates = foreach ($roleObj in $myEligibleRoles) {
             $counter++
@@ -271,7 +296,7 @@ function Enable-PIMRole {
             
             Write-Progress -Activity "Fetching policy assignment of role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
             try {
-                $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -Filter "scopeId eq '$roleDirectoryScopeId' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '$roleDefinitionId'" -ErrorAction Stop
+                $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -All -Filter "scopeId eq '$roleDirectoryScopeId' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '$roleDefinitionId'" -ErrorAction Stop
 
             } catch {
                 Write-Warning "Error fetching policy assignments for '$roleName': $($_.Exception.Message)"
@@ -279,15 +304,15 @@ function Enable-PIMRole {
             }
             #>
             # Skipping the above code as I now cache it before hand. This is faster than doing individual lookups.
-            $policyAssignment = $policyAssignmentHash[$roleDefinitionId]
+            $policyAssignment = $policyAssignmentHashRoles[$roleDefinitionId]
 
             # From there find the policy :)
             # https://learn.microsoft.com/en-us/graph/api/resources/unifiedrolemanagementpolicy?view=graph-rest-1.0
             $policyId = $policyAssignment.PolicyId
 
-            # If I have encountered this policy before, dont look it up again
-            if ($policyObjsHash.Keys -contains $policyId) {
-                $policyObj = $policyObjsHash[$policyId]
+            # Look it up in the cached table; but in the off chance that it isn't there, look it up directly
+            if ($policyObjsHashRoles.Keys -contains $policyId) {
+                $policyObj = $policyObjsHashRoles[$policyId]
 
             } else {
                 Write-Progress -Activity "Fetching settings '$(($policyId -split '_')[2])'" -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
@@ -297,8 +322,8 @@ function Enable-PIMRole {
                 try {
                     $policyObj = Get-MgPolicyRoleManagementPolicy -UnifiedRoleManagementPolicyId $policyId -ExpandProperty Rules -ErrorAction Stop
                     
-                    $policyObjsHash[$policyId] = $policyObj # caching it for within this current execution
-                    $script:policyObjsHash[$policyId] = $policyObj  # caching it for future invocations of the module
+                    $policyObjsHashRoles[$policyId] = $policyObj # caching it for within this current execution
+                    $script:policyObjsHashRoles[$policyId] = $policyObj  # caching it for future invocations of the module
 
                 } catch {
                     Write-Warning "Error fetching settings id '$policyId': $($_.Exception.Message)"
@@ -614,12 +639,11 @@ function Enable-PIMRole {
         $finalOutput | Format-Table
     }
 }
+
 # This is a copy paste of Enable-PIMRole with some bits removed...
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMRole {
     begin {
-        $requiredScopesArray = "RoleEligibilitySchedule.Read.Directory","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.Read.Directory","RoleManagement.Read.All","RoleAssignmentSchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory","RoleAssignmentSchedule.Remove.Directory"
-
         [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
@@ -628,7 +652,7 @@ function Disable-PIMRole {
         }
 
         try {
-            Connect-MgGraph -Scopes $requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
 
         } catch {
             throw "$($_.Exception.Message)"
@@ -639,7 +663,7 @@ function Disable-PIMRole {
         $scopes = $context.scopes
 
         if ($scopes -notcontains "Directory.ReadWrite.All") {
-            foreach ($requiredScope in $requiredScopesArray) {
+            foreach ($requiredScope in $script:requiredScopesArray) {
                 if ($requiredScope -notin $scopes) {
                     Write-Warning "Required scope '$requiredScope' missing"
                 }
