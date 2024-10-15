@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.10'
+    ModuleVersion = '0.0.11'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -118,7 +118,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Added Disable-PIMGroup. Fixed a bug I introduced in the previous version with Enable-PIMGroup.'
+            ReleaseNotes = 'Added -UseDeviceCode, -TenantId, and -ClientId parameters that are passed to Connect-MgGraph.'
     
             # Prerelease string of this module
             # Prerelease = ''

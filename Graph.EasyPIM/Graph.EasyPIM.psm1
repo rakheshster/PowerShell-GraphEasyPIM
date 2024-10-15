@@ -46,7 +46,15 @@ function Enable-PIMRole {
         [Parameter(Mandatory=$false)]
         [string]$TicketingSystem,
 
-        [switch]$RefreshEligibleRoles
+        [switch]$RefreshEligibleRoles,
+
+        [switch]$UseDeviceCode,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TenantId,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ClientId
     )
 
     <#
@@ -67,6 +75,14 @@ function Enable-PIMRole {
     .PARAMETER RefreshEligibleRoles
     Optional. By default, eligible roles are only checked if it's been more than 30 mins since the last invocation. If you want to check before that, use this switch. 
 
+    .PARAMETER UseDeviceCode
+    Optional. Use Device Code authentication.
+
+    .PARAMETER TenantId
+    Optional. Use this TenantId. 
+
+    .PARAMETER ClientId
+    Optional. Use this Client Id.
     #>
 
     begin {
@@ -80,8 +96,18 @@ function Enable-PIMRole {
             Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
+        $graphParams = @{
+            "Scopes" = $script:requiredScopesArray
+            "NoWelcome" = $true
+            "ErrorAction" = "Stop"
+        }
+
+        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+        if ($TenantId) { $graphParams.TenantId = $TenantId }
+        if ($ClientId) { $graphParams.ClientId = $ClientId }
+
         try {
-            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph @graphParams
 
         } catch {
             throw "$($_.Exception.Message)"
@@ -558,7 +584,7 @@ function Enable-PIMRole {
                         $justificationsHash[$($selection.RoleName)] = $justificationInput
                     }
 
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Reason will be set to: $justificationInput"
                 }
             }
@@ -681,6 +707,27 @@ function Enable-PIMRole {
 # This is a copy paste of Enable-PIMRole with some bits removed...
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMRole {
+    param(
+        [switch]$UseDeviceCode,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TenantId,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ClientId
+    )
+
+    <#
+    .PARAMETER UseDeviceCode
+    Optional. Use Device Code authentication.
+
+    .PARAMETER TenantId
+    Optional. Use this TenantId. 
+
+    .PARAMETER ClientId
+    Optional. Use this Client Id.
+    #>
+
     begin {
         Write-Host ""
         $colorParams = $script:colorParams
@@ -692,8 +739,18 @@ function Disable-PIMRole {
             Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
+        $graphParams = @{
+            "Scopes" = $script:requiredScopesArray
+            "NoWelcome" = $true
+            "ErrorAction" = "Stop"
+        }
+
+        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+        if ($TenantId) { $graphParams.TenantId = $TenantId }
+        if ($ClientId) { $graphParams.ClientId = $ClientId }
+
         try {
-            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph @graphParams
 
         } catch {
             throw "$($_.Exception.Message)"
@@ -932,7 +989,15 @@ function Enable-PIMGroup {
         [Parameter(Mandatory=$false)]
         [string]$TicketingSystem,
 
-        [switch]$RefreshEligibleGroups
+        [switch]$RefreshEligibleGroups,
+
+        [switch]$UseDeviceCode,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TenantId,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ClientId
     )
 
     <#
@@ -965,8 +1030,18 @@ function Enable-PIMGroup {
             Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
+        $graphParams = @{
+            "Scopes" = $script:requiredScopesArray
+            "NoWelcome" = $true
+            "ErrorAction" = "Stop"
+        }
+
+        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+        if ($TenantId) { $graphParams.TenantId = $TenantId }
+        if ($ClientId) { $graphParams.ClientId = $ClientId }
+
         try {
-            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph @graphParams
 
         } catch {
             throw "$($_.Exception.Message)"
@@ -1482,6 +1557,27 @@ function Enable-PIMGroup {
 # This is a copy paste of Enable-PIMRole with some bits removed...
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMGroup {
+    param(
+        [switch]$UseDeviceCode,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TenantId,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ClientId
+    )
+
+    <#
+    .PARAMETER UseDeviceCode
+    Optional. Use Device Code authentication.
+
+    .PARAMETER TenantId
+    Optional. Use this TenantId. 
+
+    .PARAMETER ClientId
+    Optional. Use this Client Id.
+    #>
+
     begin {
         Write-Host ""
         $colorParams = $script:colorParams
@@ -1493,8 +1589,18 @@ function Disable-PIMGroup {
             Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
         }
 
+        $graphParams = @{
+            "Scopes" = $script:requiredScopesArray
+            "NoWelcome" = $true
+            "ErrorAction" = "Stop"
+        }
+
+        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+        if ($TenantId) { $graphParams.TenantId = $TenantId }
+        if ($ClientId) { $graphParams.ClientId = $ClientId }
+
         try {
-            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+            Connect-MgGraph @graphParams
 
         } catch {
             throw "$($_.Exception.Message)"
