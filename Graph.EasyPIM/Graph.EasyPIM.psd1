@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.8'
+    ModuleVersion = '0.0.9'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -117,7 +117,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Now supports enabling PIM for Groups.'
+            ReleaseNotes = 'The default justification is now some random text instead of "xyz". Changed caching to take into account multiple user ids. Minor cosmetic changes.'
     
             # Prerelease string of this module
             # Prerelease = ''
