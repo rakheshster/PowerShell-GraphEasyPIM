@@ -14,13 +14,14 @@ Tested on Windows, macOS, and Linux with PowerShell 7.4. It currently has the fo
 - `Enable-PIMRole` - enable (activate) Entra ID PIM roles.
 - `Enable-PIMGroup` - enable (activate) Entra ID PIM groups.
 - `Disable-PIMRole` - disable (deactivate) Entra ID PIM roles.
+- `Disable-PIMGroup` - disable (deactivate) Entra ID PIM groups.
 
 ## Pre-requisite modules
 This modules depends upon the following. 
 
-- "Microsoft.Graph.Authentication"
-- "Microsoft.Graph.Identity.Governance"
-- "Microsoft.PowerShell.ConsoleGuiTools"
+- `Microsoft.Graph.Authentication`
+- `Microsoft.Graph.Identity.Governance`
+- `Microsoft.PowerShell.ConsoleGuiTools`
 
 If it weren't for these, this module wouldn't exist! Thank you 😍 to the creators of these, especially `Microsoft.PowerShell.ConsoleGuiTools` which is what I use to drive things. 🙏
 
