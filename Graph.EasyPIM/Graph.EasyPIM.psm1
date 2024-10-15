@@ -102,9 +102,16 @@ function Enable-PIMRole {
             "ErrorAction" = "Stop"
         }
 
-        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
-        if ($TenantId) { $graphParams.TenantId = $TenantId }
-        if ($ClientId) { $graphParams.ClientId = $ClientId }
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
+        if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
+        if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+
+        # Disconnect the existing sessions if one of these were provided
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) { 
+            try {
+                Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
 
         try {
             Connect-MgGraph @graphParams
@@ -442,7 +449,7 @@ function Enable-PIMRole {
 
             # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
             if ($roleDirectoryScopeId -eq '/') {
-                $roleScope = "Directory"
+                $roleScope = "Tenant"
 
             } elseif ($roleDirectoryScopeId -match "\/administrativeUnits\/") {
                 $adminUnitId = $roleDirectoryScopeId -replace '\/administrativeUnits\/',''
@@ -506,12 +513,12 @@ function Enable-PIMRole {
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
@@ -551,7 +558,7 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.RoleName)] = "$defaultJustification"
@@ -584,18 +591,18 @@ function Enable-PIMRole {
                         $justificationsHash[$($selection.RoleName)] = $justificationInput
                     }
 
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
                     Write-Host "Reason will be set to: $justificationInput"
                 }
             }
 
             if ($selection.More.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
 
                 $ticketNumberHash[$($selection.RoleName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -624,7 +631,7 @@ function Enable-PIMRole {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -745,9 +752,16 @@ function Disable-PIMRole {
             "ErrorAction" = "Stop"
         }
 
-        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
-        if ($TenantId) { $graphParams.TenantId = $TenantId }
-        if ($ClientId) { $graphParams.ClientId = $ClientId }
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
+        if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
+        if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+
+        # Disconnect the existing sessions if one of these were provided
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) { 
+            try {
+                Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
 
         try {
             Connect-MgGraph @graphParams
@@ -771,7 +785,7 @@ function Disable-PIMRole {
         $userId = (Get-MgUser -UserId $context.Account).Id
 
         try {
-            Write-Host @colorParams "🥷 Fetching all active Entra ID roles. This should be pretty quick!"
+            Write-Host @colorParams "🥷 Fetching all active Entra ID roles. This is usually pretty quick!"
 
             Write-Progress -Activity "Fetching all active Entra ID roles" -Id 0
             [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
@@ -858,7 +872,7 @@ function Disable-PIMRole {
 
             # Thanks to https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/assign-roles-different-scopes
             if ($roleDirectoryScopeId -eq '/') {
-                $roleScope = "Directory"
+                $roleScope = "Tenant"
 
             } elseif ($roleDirectoryScopeId -match "\/administrativeUnits\/") {
                 $adminUnitId = $roleDirectoryScopeId -replace '\/administrativeUnits\/',''
@@ -919,12 +933,12 @@ function Disable-PIMRole {
 
         foreach ($selection in $userSelections) {
             if ($selection.More.More.ActiveMinutes -le 5) {
-                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
                 Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
             }
 
-            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
             Write-Host "Disabling role"
 
             $params = @{
@@ -1036,9 +1050,16 @@ function Enable-PIMGroup {
             "ErrorAction" = "Stop"
         }
 
-        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
-        if ($TenantId) { $graphParams.TenantId = $TenantId }
-        if ($ClientId) { $graphParams.ClientId = $ClientId }
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
+        if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
+        if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+
+        # Disconnect the existing sessions if one of these were provided
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) { 
+            try {
+                Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
 
         try {
             Connect-MgGraph @graphParams
@@ -1362,12 +1383,12 @@ function Enable-PIMGroup {
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
                     Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
                 Write-Host "Disabling group (so we can enable it again)"
 
                 $params = @{
@@ -1407,7 +1428,7 @@ function Enable-PIMGroup {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.GroupName)] = "$defaultJustification"
@@ -1440,18 +1461,18 @@ function Enable-PIMGroup {
                         $justificationsHash[$($selection.GroupName)] = $justificationInput
                     }
 
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
                     Write-Host "Reason will be set to: $justificationInput"
                 }
             }
 
             if ($selection.More.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
 
                 $ticketNumberHash[$($selection.GroupName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -1480,7 +1501,7 @@ function Enable-PIMGroup {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -1595,9 +1616,16 @@ function Disable-PIMGroup {
             "ErrorAction" = "Stop"
         }
 
-        if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
-        if ($TenantId) { $graphParams.TenantId = $TenantId }
-        if ($ClientId) { $graphParams.ClientId = $ClientId }
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
+        if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
+        if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+
+        # Disconnect the existing sessions if one of these were provided
+        if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) { 
+            try {
+                Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
 
         try {
             Connect-MgGraph @graphParams
@@ -1621,7 +1649,7 @@ function Disable-PIMGroup {
         $userId = (Get-MgUser -UserId $context.Account).Id
 
         try {
-            Write-Host @colorParams "🥷 Fetching all active Entra ID groups. This should be pretty quick!"
+            Write-Host @colorParams "🥷 Fetching all active Entra ID groups. This is usually pretty quick!"
 
             Write-Progress -Activity "Fetching all active Entra ID groups" -Id 0
             [array]$myActiveGroups = Get-MgIdentityGovernancePrivilegedAccessGroupAssignmentSchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
@@ -1752,12 +1780,12 @@ function Disable-PIMGroup {
 
         foreach ($selection in $userSelections) {
             if ($selection.More.More.ActiveMinutes -le 5) {
-                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
                 Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
                 continue
             }
 
-            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
             Write-Host "Disabling group"
 
             $params = @{
