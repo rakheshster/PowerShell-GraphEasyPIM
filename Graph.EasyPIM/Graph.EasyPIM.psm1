@@ -27,6 +27,7 @@ if ($host.PrivateData.VerboseBackgroundColor -ne "-1") {
 $lastUpdatedGroups = @{}
 $lastUpdatedRoles = @{}
 $myEligibleRoles = @{}
+$myEligibleGroups = @{}
 $policyAssignmentHashRoles = @{}
 $policyObjsHashRoles = @{}
 $policyAssignmentHashGroupsOwner = @{}
@@ -480,12 +481,12 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
                     Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
-                    Write-Host @colorParams "Cannot disable the role as it must be active for at least 5 minutes."
+                    Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                     continue
                 }
 
                 Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
-                Write-Host @colorParams "Disabling role (so we can enable it again)"
+                Write-Host "Disabling role (so we can enable it again)"
 
                 $params = @{
                     Action = "selfDeactivate"
@@ -598,7 +599,7 @@ function Enable-PIMRole {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
-            Write-Host @colorParams "Enabling for $($selection.MaxDuration)"
+            Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
                 Action = "selfActivate"
@@ -845,6 +846,11 @@ function Disable-PIMRole {
 
         Write-Progress -Id 0 -Completed
 
+        if ($roleStates.Count -eq 0) {
+            Write-Host @colorParams ("🚀 No active Entra ID roles found.")
+            Write-Host ""
+        }
+
         $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
@@ -857,12 +863,12 @@ function Disable-PIMRole {
         foreach ($selection in $userSelections) {
             if ($selection.More.More.ActiveMinutes -le 5) {
                 Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
-                Write-Host @colorParams "Cannot disable the role as it must be active for at least 5 minutes."
+                Write-Host "Cannot disable the role as it must be active for at least 5 minutes."
                 continue
             }
 
             Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] | " -f $($selection.RoleName), $($selection.Scope))
-            Write-Host @colorParams "Disabling role"
+            Write-Host "Disabling role"
 
             $params = @{
                 Action = "selfDeactivate"
@@ -1019,7 +1025,7 @@ function Enable-PIMGroup {
 
         try {
             if ($needsUpdating) {
-                Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID groups. This will take a few minutes."
+                Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID groups. This might take a few minutes."
 
                 Write-Progress -Activity "Fetching all eligible Entra ID groups" -Id 0
                 [array]$myEligibleGroups = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilitySchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
@@ -1282,12 +1288,12 @@ function Enable-PIMGroup {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
                     Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
-                    Write-Host @colorParams "Cannot disable the group as it must be active for at least 5 minutes."
+                    Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
                     continue
                 }
 
                 Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
-                Write-Host @colorParams "Disabling group (so we can enable it again)"
+                Write-Host "Disabling group (so we can enable it again)"
 
                 $params = @{
                     accessId = $selection.More.More.AccessId
@@ -1400,7 +1406,7 @@ function Enable-PIMGroup {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
-            Write-Host @colorParams "Enabling for $($selection.MaxDuration)"
+            Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
                 accessId = $selection.More.More.AccessId
@@ -1473,7 +1479,229 @@ function Enable-PIMGroup {
     }
 }
 
-# TBD
+# This is a copy paste of Enable-PIMRole with some bits removed...
+# It's very simple compared to Enable-PIMRole
 function Disable-PIMGroup {
+    begin {
+        Write-Host ""
+        $colorParams = $script:colorParams
 
+        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+        [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+
+        if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
+            Write-Host @colorParams "🎉 A newer version of this module is available in PowerShell Gallery"
+        }
+
+        try {
+            Connect-MgGraph -Scopes $script:requiredScopesArray -NoWelcome -ErrorAction Stop
+
+        } catch {
+            throw "$($_.Exception.Message)"
+        }
+
+        $context = Get-MgContext
+
+        $scopes = $context.scopes
+
+        if ($scopes -notcontains "Directory.ReadWrite.All") {
+            foreach ($requiredScope in $script:requiredScopesArray) {
+                if ($requiredScope -notin $scopes) {
+                    Write-Warning "Required scope '$requiredScope' missing"
+                }
+            }
+        }
+
+        $userId = (Get-MgUser -UserId $context.Account).Id
+
+        try {
+            Write-Host @colorParams "🥷 Fetching all active Entra ID groups. This should be pretty quick!"
+
+            Write-Progress -Activity "Fetching all active Entra ID groups" -Id 0
+            [array]$myActiveGroups = Get-MgIdentityGovernancePrivilegedAccessGroupAssignmentSchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop
+            
+        } catch {
+            throw "Error fetching groups: $($_.Exception.Message)"
+        }
+
+        Write-Progress -Id 0 -Completed
+    }
+
+    process {
+        Write-Host ""
+
+        # I use these for showing progress
+        [int]$counter = 0
+        [int]$totalCount = $myActiveGroups.Count
+        $groupNamesCache = @{}
+
+        $groupStates = foreach ($groupRoleObj in $myActiveGroups) {
+            $counter++
+            $percentageComplete = ($counter/$totalCount)*100
+
+            $groupId = $groupRoleObj.GroupId
+            $groupName = $groupRoleObj.Group.DisplayName
+            $groupNamesCache[$groupId] = $groupName
+
+            $accessId = $groupRoleObj.AccessId
+
+            $timespanArray = @()
+            $groupRoleExpired = $false
+            $groupRoleAssignmentType = "Inactive"
+
+            Write-Progress -Activity "Processing group '$groupName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+
+            $activeGroupRoleObj = $null
+            $activeGroupRoleObj = $myActiveGroups | Where-Object { $_.GroupId -eq "$groupId" -and $_.AccessId -eq "$accessId" }
+
+            if ($activeGroupRoleObj) {
+                Write-Progress -Activity "Group is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                Start-Sleep -Milliseconds 200   # a stupid hack coz Write-Progress doesn't display outside loops apparently! https://github.com/PowerShell/PowerShell/issues/5741
+                Write-Progress -Activity "o is active; calculating time remaining..." -ParentId 0 -Id 1 -Status "Waiting..." -PercentComplete $percentageComplete
+                
+                # Double checking coz during my testing I ran into instances where this was sometimes incomplete
+                if ($activeGroupRoleObj.ScheduleInfo.Expiration.EndDateTime) {
+                    $groupRoleAssignmentType = "Active"
+
+                    $timeSpan = New-TimeSpan -Start (Get-Date).ToUniversalTime() -End $activeGroupRoleObj.ScheduleInfo.Expiration.EndDateTime
+                    if ($timeSpan.Days -gt 0) {
+                        if ($timeSpan.Days -eq 1) {
+                            $timespanArray += "$($timeSpan.Days) day"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Days) days"
+                        }
+                    }
+    
+                    if ($timeSpan.Hours -gt 0) {
+                        if ($timeSpan.Hours -eq 1) {
+                            $timespanArray += "$($timeSpan.Hours) hour"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Hours) hours"
+                        }
+                    }
+    
+                    if ($timeSpan.Minutes -gt 0) {
+                        if ($timeSpan.Minutes -eq 1) {
+                            $timespanArray += "$($timeSpan.Minutes) minute"
+    
+                        } else {
+                            $timespanArray += "$($timeSpan.Minutes) minutes"
+                        }
+                    }
+    
+                    # Just in case there's a delay between getting the states and when I calculate this...
+                    if ($timeSpan.Ticks -lt 0) { 
+                        $groupRoleExpired = $true 
+                    }
+
+                } else {
+                    $groupRoleExpired = $true 
+                }
+
+                Write-Progress -Id 1 -Completed
+
+            } else {
+                $groupRoleExpired = $true
+            }
+
+            [pscustomobject][ordered]@{
+                "GroupName" = $groupName
+                "Status" = $groupRoleAssignmentType
+                "Type" = if ($accessId -eq "member") { "Member" } else { "Owner" }
+                "ExpiresIn" = if (!($groupRoleExpired)) {
+                    # Take only the topmost entry (day or hour in case of more than one)
+                    if ($timespanArray.Count -gt 1) {
+                        "~" + $timespanArray[0]
+                    } else {
+                        $timespanArray[0]
+                    }
+                } # Tweak the output to to save some space
+
+                "More" = [pscustomobject]@{
+                    "More" = [pscustomobject]@{
+                        "AccessId" = $accessId
+                        "GroupId" = $groupRoleObj.GroupId
+                        "ActiveMinutes" = if (!($groupRoleExpired)) { (New-TimeSpan -End (Get-Date).ToUniversalTime() -Start $activeGroupRoleObj.ScheduleInfo.StartDateTime).TotalMinutes }
+                    }
+                }  # Two levels to hide this and save some space
+            }
+        }
+
+        Write-Progress -Completed -Id 0
+
+        if ($groupStates.Count -eq 0) {
+            Write-Host @colorParams ("🚀 No active Entra ID groups found.")
+            Write-Host ""
+        }
+
+        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active Entra ID PIM groups (count: $totalCount)"
+
+        # I use this for tidying up some of the output later; find the longest entry in the selections
+        $longestRoleLength = ($userSelections.GroupName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
+
+        # An array to capture each of the items we action below
+        $requestObjsArray = @()
+
+        foreach ($selection in $userSelections) {
+            if ($selection.More.More.ActiveMinutes -le 5) {
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+                Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
+                continue
+            }
+
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} | " -f $($selection.GroupName))
+            Write-Host "Disabling group"
+
+            $params = @{
+                accessId = $selection.More.More.AccessId
+                action = "selfDeactivate"
+                principalId = $userId
+                groupId = $selection.More.More.GroupId
+            }
+
+            try {
+                $requestObj = New-MgIdentityGovernancePrivilegedAccessGroupAssignmentScheduleRequest -BodyParameter $params -ErrorAction Stop
+            
+                # And add it to an array so we can loop over in the end
+                $requestObjsArray += $requestObj
+        
+            } catch {
+                Write-Error "Error deactivating '$($selection.GroupName)': $($_.Exception.Message)"
+            }
+        }
+
+        if ($requestObjsArray.Count -ne 0) {
+            Write-Host ""
+
+            $counter = 0
+            $maxWaitSecs = 20
+            while ($counter -lt $maxWaitSecs) {
+                Write-Progress "Waiting $maxWaitSecs seconds before showing the final status" -PercentComplete $($counter*100/$maxWaitSecs) -Status " "
+                Start-Sleep -Seconds 1
+                $counter++
+            }
+
+            Write-Progress -Completed
+        }
+
+        $counter = 0
+        $totalCount = $requestObjsArray.Count
+
+        $finalOutput = foreach ($requestObj in $requestObjsArray) {
+            $counter++
+            Write-Progress "Fetching status of group '$($groupNamesCache[$($requestObj.GroupId)])'" -PercentComplete $($counter*100/$totalCount) -Status "$counter/$totalCount" 
+            
+            Get-MgIdentityGovernancePrivilegedAccessGroupAssignmentScheduleRequest -PrivilegedAccessGroupAssignmentScheduleRequestId $requestObj.Id | Select-Object -Property @{
+                "Name" = "Group";
+                "Expression" = { $groupNamesCache[$($_.GroupId)] }
+            }, @{
+                "Name" = "Type";
+                "Expression" = { if ($_.AccessId -eq "member") { "Member" } else { "Owner" } }
+            }, Status 
+        }
+
+        $finalOutput | Format-Table
+    }
 }

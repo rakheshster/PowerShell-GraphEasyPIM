@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.9'
+    ModuleVersion = '0.0.10'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -77,7 +77,8 @@
     FunctionsToExport = @(
         "Enable-PIMRole",
         "Enable-PIMGroup",
-        "Disable-PIMRole"
+        "Disable-PIMRole",
+        "Disable-PIMGroup"
     )
     
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
@@ -88,7 +89,7 @@
     VariablesToExport = @()
     
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    # AliasesToExport = @()
+    AliasesToExport = @()
     
     # DSC resources to export from this module
     # DscResourcesToExport = @()
@@ -117,7 +118,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'The default justification is now some random text instead of "xyz". Changed caching to take into account multiple user ids. Minor cosmetic changes.'
+            ReleaseNotes = 'Added Disable-PIMGroup. Fixed a bug I introduced in the previous version with Enable-PIMGroup.'
     
             # Prerelease string of this module
             # Prerelease = ''
