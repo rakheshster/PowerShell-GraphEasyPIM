@@ -61,10 +61,10 @@ function Enable-PIMRole {
     .DESCRIPTION
     Enable Entra ID PIM roles via an easy to use TUI (Text User Interface). Only supports enabling; not disabling. Use Disable-PIMRole to disable.
 
-    If a role needs a reason/ justification you can either enter one, or press enter to go with a randomly generated 12 character string, or type something and end with * to use it for all the activations.
+    If a role needs a reason/ justification you can either enter one, or press enter to go with a default "need for work", or type something and end with * to use it for all the activations.
 
     .PARAMETER SkipJustification
-    Optional. If specified, it sets the reason/ justifaction for activation to be a randomly generated 12 character string.
+    Optional. If specified, it sets the reason/ justifaction for activation to be a default "need for work".
 
     .PARAMETER Justification
     Optional. If specified, it sets the reason/ justifaction for activation to whatever is input.
@@ -269,7 +269,8 @@ function Enable-PIMRole {
         $roleDefinitionsCache = @{}
 
         # Random 12 lower case characters
-        $defaultJustification = -join ((97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+        # $defaultJustification = -join ((97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+        $defaultJustification = "need for work"
 
         # I use these for showing progress
         [int]$counter = 0
@@ -1018,10 +1019,10 @@ function Enable-PIMGroup {
     .DESCRIPTION
     Enable Entra ID PIM groups via an easy to use TUI (Text User Interface). Only supports enabling; not disabling. Use Disable-PIMGroup to disable.
 
-    If a group needs a reason/ justification you can either enter one, or press enter to go with a randomly generated 12 character string, or type something and end with * to use it for all the activations.
+    If a group needs a reason/ justification you can either enter one, or press enter to go with a default "need for work", or type something and end with * to use it for all the activations.
 
     .PARAMETER SkipJustification
-    Optional. If specified, it sets the reason/ justifaction for activation to be a randomly generated 12 character string".
+    Optional. If specified, it sets the reason/ justifaction for activation to be a default "need for work".
 
     .PARAMETER Justification
     Optional. If specified, it sets the reason/ justifaction for activation to whatever is input.
@@ -1205,7 +1206,8 @@ function Enable-PIMGroup {
         Write-Host ""
 
         # Random 12 lower case characters
-        $defaultJustification = -join ((97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+        # $defaultJustification = -join ((97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+        $defaultJustification = "need for work"
 
         # I use these for showing progress
         [int]$counter = 0

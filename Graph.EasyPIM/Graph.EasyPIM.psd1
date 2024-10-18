@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.12'
+    ModuleVersion = '0.0.13'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -118,7 +118,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Minor changes.'
+            ReleaseNotes = 'Changed the default justification. No other changes.'
     
             # Prerelease string of this module
             # Prerelease = ''
@@ -139,5 +139,3 @@
     # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
     # DefaultCommandPrefix = ''   
 }
-
-    
