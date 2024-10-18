@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.13'
+    ModuleVersion = '0.0.14'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -118,7 +118,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Changed the default justification. No other changes.'
+            ReleaseNotes = 'Changed the default justification again. No other changes.'
     
             # Prerelease string of this module
             # Prerelease = ''
