@@ -67,3 +67,5 @@ Way faster than the Entra ID portal. And you can select more than 1 role at a go
 ## API reference
 - [PIM for Entra roles](https://learn.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagementv3-overview?view=graph-rest-1.0) 
 - [PIM for Groups](https://learn.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagement-for-groups-api-overview?view=graph-rest-1.0)
+
+![Static Badge](https://img.shields.io/badge/mentioned%20in-x) [![Static Badge](https://img.shields.io/badge/65-x?label=entra%20news&link=https%3A%2F%2Fentra.news%2Fp%2Fentra-id-news-65-this-week-in-microsoft%3Fopen%3Dfalse%23%25C2%25A7learn)](https://entra.news/p/entra-id-news-65-this-week-in-microsoft?open=false#%C2%A7learn) [![Static Badge](https://img.shields.io/badge/66-x?label=entra%20news&link=https%3A%2F%2Fentra.news%2Fp%2Fentra-news-66-this-week-in-microsoft%3Fopen%3Dfalse%23%25C2%25A7from-the-community)](https://entra.news/p/entra-news-66-this-week-in-microsoft?open=false#%C2%A7from-the-community)
