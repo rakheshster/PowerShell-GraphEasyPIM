@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.14'
+    ModuleVersion = '0.0.15'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -54,6 +54,7 @@
     RequiredModules = @(
         "Microsoft.Graph.Authentication",
         "Microsoft.Graph.Identity.Governance",
+        "Microsoft.Graph.Users",
         "Microsoft.PowerShell.ConsoleGuiTools",
         "Microsoft.Graph.Identity.DirectoryManagement"
     )
@@ -118,7 +119,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Changed the default justification again. No other changes.'
+            ReleaseNotes = 'No changes. Marked Graph.Users as a depenedency. Had missed this.'
     
             # Prerelease string of this module
             # Prerelease = ''

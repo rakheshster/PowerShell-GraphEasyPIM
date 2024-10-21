@@ -31,6 +31,7 @@ Tested on Windows, macOS, and Linux with PowerShell 7.4. It currently has the fo
 - You might need to involve a Global Admin to do some consents on the `Microsoft Graph Command Line Tools` service principal. To do an admin consent on behalf of the organization, a Global Admin is required; but an Application Admin can do consent for themselves. 
     - This URL should help: `https://login.microsoftonline.com/{tenantId}/v2.0/adminconsent?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&scope=RoleEligibilitySchedule.Read.Directory RoleEligibilitySchedule.ReadWrite.Directory RoleManagement.Read.Directory RoleManagement.Read.All RoleManagement.ReadWrite.Directory RoleAssignmentSchedule.ReadWrite.Directory RoleAssignmentSchedule.Remove.Directory PrivilegedEligibilitySchedule.Read.AzureADGroup PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup PrivilegedAccess.Read.AzureADGroup PrivilegedAccess.ReadWrite.AzureADGroup RoleManagementPolicy.Read.AzureADGroup`
     - Of course, replace `{tenantId}` above.
+- If the preference is to use a custom application, create one following the steps [here](https://learn.microsoft.com/en-us/powershell/microsoftgraph/authentication-commands?view=graph-powershell-1.0#use-delegated-access-with-a-custom-application-for-microsoft-graph-powershell) and add the permissions above to it. After it is admin consented to, you can connect using `Enable-PIMRole -ClientId <YOUR_NEW_APP_ID> -TenantId <YOUR_TENANT_ID>`
 
 ## Pre-requisite modules
 This modules depends upon the following. 
@@ -38,6 +39,12 @@ This modules depends upon the following.
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Identity.Governance`
 - `Microsoft.PowerShell.ConsoleGuiTools`
+- `Microsoft.Graph.Users`
+- `Microsoft.Graph.Identity.DirectoryManagement`
+
+```
+Install-Module "Microsoft.Graph.Authentication", "Microsoft.Graph.Identity.Governance", "Microsoft.Graph.Users", "Microsoft.Graph.Identity.DirectoryManagement", "Microsoft.PowerShell.ConsoleGuiTools"
+```
 
 If it weren't for these, this module wouldn't exist! Thank you 😍 to the creators of these, especially `Microsoft.PowerShell.ConsoleGuiTools` which is what I use to drive things. 🙏
 
