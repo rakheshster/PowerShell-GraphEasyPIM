@@ -35,25 +35,33 @@ $policyAssignmentHashGroupsMember = @{}
 
 function Enable-PIMRole {
     param(
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [Alias("SkipReason")]
         [switch]$SkipJustification,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [Alias("Reason")]
         [string]$Justification,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TicketingSystem,
 
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$RefreshEligibleRoles,
 
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TenantId,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
         [string]$ClientId
     )
 
@@ -515,7 +523,7 @@ function Enable-PIMRole {
 
         Write-Progress -Completed -Id 0
 
-        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
+        $userSelections = $roleStates | Sort-Object -Property RoleName | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
 
         # Let's ask for the required info upfront
         $justificationsHash = @{}
@@ -693,7 +701,10 @@ function Enable-PIMRole {
                 $requestObjsArray += $requestObj
         
             } catch {
-                Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+                if ($_.Exception.Message -notmatch 'already exists') {
+                    Write-Error "Error activating '$($selection.RoleName)': $($_.Exception.Message)"
+
+                }
             }
         }
 
@@ -732,12 +743,15 @@ function Enable-PIMRole {
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMRole {
     param(
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TenantId,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
         [string]$ClientId
     )
 
@@ -756,7 +770,7 @@ function Disable-PIMRole {
         Write-Host ""
         $colorParams = $script:colorParams
         
-        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
+        [System.Version]$installedVersion = (Get-Module Graph.EasyPIM -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1).Version
         [System.Version]$availableVersion = (Find-Module Graph.EasyPIM -ErrorAction SilentlyContinue).Version
 
         if ($installedVersion -and $availableVersion -and ($installedVersion -lt $availableVersion)) {
@@ -939,7 +953,7 @@ function Disable-PIMRole {
             Write-Host ""
         }
 
-        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
+        $userSelections = $roleStates | Sort-Object -Property RoleName | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
         $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
@@ -1009,25 +1023,33 @@ function Disable-PIMRole {
 
 function Enable-PIMGroup {
     param(
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [Alias("SkipReason")]
         [switch]$SkipJustification,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [Alias("Reason")]
         [string]$Justification,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TicketingSystem,
 
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$RefreshEligibleGroups,
 
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TenantId,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
         [string]$ClientId
     )
 
@@ -1403,7 +1425,7 @@ function Enable-PIMGroup {
 
         Write-Progress -Completed -Id 0
 
-        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
+        $userSelections = $groupStates | Sort-Object -Property GroupName | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
 
         # Let's ask for the required info upfront
         $justificationsHash = @{}
@@ -1412,17 +1434,18 @@ function Enable-PIMGroup {
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
         $longestRoleLength = ($userSelections.GroupName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
+        $longestScopeLength = ($userSelections.Type | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
 
         $groupsWereDisabled = $false
         foreach ($selection in $userSelections) {
             if ($selection.Status -ne "Inactive") {
                 if ($selection.More.More.ActiveMinutes -le 5) {
-                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
                     Write-Host "Cannot disable the group as it must be active for at least 5 minutes."
                     continue
                 }
 
-                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
                 Write-Host "Disabling group (so we can enable it again)"
 
                 $params = @{
@@ -1462,7 +1485,7 @@ function Enable-PIMGroup {
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
             if ($selection.More.More.EnablementRule -contains "Justification") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
 
                 if ($SkipJustification) {
                     $justificationsHash[$($selection.GroupName)] = "$defaultJustification"
@@ -1495,18 +1518,18 @@ function Enable-PIMGroup {
                         $justificationsHash[$($selection.GroupName)] = $justificationInput
                     }
 
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
                     Write-Host "Reason will be set to: $justificationInput"
                 }
             }
 
             if ($selection.More.More.EnablementRule -contains "Ticketing") {
-                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
 
                 $ticketNumberHash[$($selection.GroupName)] = Read-Host "Please provide a ticket number"
 
                 if ($TicketingSystem.Length -ne 0) {
-                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} " -f $($selection.GroupName))
+                    Write-Host -NoNewline @colorParams ("📋 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
                     $ticketingSystemInput = Read-Host "Please provide the ticketing system name"
 
                     # If the justitication ends with an asterisk, use it for everything else that follows...
@@ -1535,7 +1558,7 @@ function Enable-PIMGroup {
             # Coz we wouldn't have been able to disable them above to reactivate
             if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le 5) { continue }
 
-            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} " -f $($selection.GroupName))
+            Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
             Write-Host "Enabling for $($selection.MaxDuration)"
 
             $params = @{
@@ -1571,7 +1594,10 @@ function Enable-PIMGroup {
                 $requestObjsArray += $requestObj
         
             } catch {
-                Write-Error "Error activating '$($selection.GroupName)': $($_.Exception.Message)"
+                if ($_.Exception.Message -notmatch 'already exists') {
+                    Write-Error "Error activating '$($selection.GroupName)': $($_.Exception.Message)"
+
+                }
             }
         }
 
@@ -1615,10 +1641,11 @@ function Disable-PIMGroup {
     param(
         [switch]$UseDeviceCode,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [string]$TenantId,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
         [string]$ClientId
     )
 
@@ -1804,7 +1831,7 @@ function Disable-PIMGroup {
             Write-Host ""
         }
 
-        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active Entra ID PIM groups (count: $totalCount)"
+        $userSelections = $groupStates | Sort-Object -Property GroupName | Out-ConsoleGridView -Title "List of active Entra ID PIM groups (count: $totalCount)"
 
         # I use this for tidying up some of the output later; find the longest entry in the selections
         $longestRoleLength = ($userSelections.GroupName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length

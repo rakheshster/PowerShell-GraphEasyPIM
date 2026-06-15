@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.15'
+    ModuleVersion = '0.0.16'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -119,7 +119,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'No changes. Marked Graph.Users as a depenedency. Had missed this.'
+            ReleaseNotes = 'Also show the group membership type. Added parameter sets to enforce a TenantId too if ClientId is provided. Sorts roles.'
     
             # Prerelease string of this module
             # Prerelease = ''
