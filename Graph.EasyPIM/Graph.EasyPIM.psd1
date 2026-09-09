@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.16'
+    ModuleVersion = '0.0.17'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -119,7 +119,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Also show the group membership type. Added parameter sets to enforce a TenantId too if ClientId is provided. Sorts roles.'
+            ReleaseNotes = 'Sort scoped PIM roles by scope and role name before tenant-wide roles. Also show the group membership type. Added parameter sets to enforce a TenantId too if ClientId is provided.'
     
             # Prerelease string of this module
             # Prerelease = ''
