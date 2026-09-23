@@ -34,7 +34,7 @@ $policyAssignmentHashGroupsOwner = @{}
 $policyAssignmentHashGroupsMember = @{}
 
 # Keep operational timing values together so cache behaviour and PIM status waits are easy to tune consistently.
-$roleCacheExpiryMinutes = 30
+$roleCacheExpiryHours = 8
 $groupCacheExpiryHours = 8
 $minimumActiveMinutes = 5
 $requestStatusWaitSeconds = 20
@@ -83,6 +83,14 @@ function Enable-PIMRole {
 
         [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
         [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [string[]]$RoleName,
+
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [TimeSpan]$Duration,
+
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
         [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
@@ -109,7 +117,13 @@ function Enable-PIMRole {
     Optional. If specified, it sets the ticketing system for role activations that need a ticket number. Otherwise, you are prompted; blank ticket-number input uses 12345, and blank ticket-system input uses Fresh.
 
     .PARAMETER RefreshEligibleRoles
-    Optional. By default, eligible roles are only checked if it's been more than 30 mins since the last invocation. If you want to check before that, use this switch.
+    Optional. By default, eligible roles are only checked if it's been more than 8 hours since the last invocation. If you want to check before that, use this switch.
+
+    .PARAMETER RoleName
+    Optional. The names of eligible roles to activate without displaying the selection TUI. An unsuffixed name activates only the tenant-wide assignment. To activate a scoped assignment, use the format 'RoleName:Scope', where Scope exactly matches the value displayed in the TUI.
+
+    .PARAMETER Duration
+    Optional. The duration for which to activate selected roles. If it exceeds a role's configured PIM maximum duration, that role is activated for its maximum duration and a warning is shown. If omitted, each role is activated for its maximum duration.
 
     .PARAMETER UseDeviceCode
     Optional. Use Device Code authentication.
@@ -132,12 +146,12 @@ function Enable-PIMRole {
         "ErrorAction" = "Stop"
     }
 
-    if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
-    if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
-    if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+    if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $graphParams.TenantId = $TenantId }
+    if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $graphParams.ClientId = $ClientId }
 
-    # Disconnect the existing sessions if one of these were provided
-    if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) {
+    # Disconnect the existing sessions if custom connection settings were supplied directly or through PSDefaultParameterValues.
+    if ($UseDeviceCode -or -not [string]::IsNullOrWhiteSpace($TenantId) -or -not [string]::IsNullOrWhiteSpace($ClientId)) {
         try {
             Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
         } catch {}
@@ -175,16 +189,23 @@ function Enable-PIMRole {
         if ($null -ne $lastUpdatedRoles) {
             $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdatedRoles -End $currentTime
 
-            if ($lastUpdatedTimespan.TotalMinutes -gt $script:roleCacheExpiryMinutes) {
+            if ($lastUpdatedTimespan.TotalHours -gt $script:roleCacheExpiryHours) {
                 $needsUpdating = $true
 
             } else {
                 $needsUpdating = $false
-                if ($lastUpdatedTimespan.TotalMinutes -eq 1) {
-                    $minutes = "a minute"
+                if ($lastUpdatedTimespan.TotalHours -eq 1) {
+                    $minutes = "an hour"
 
+                } elseif ($lastUpdatedTimespan.TotalHours -eq 0) {
+                    if ($lastUpdatedTimespan.TotalMinutes -eq 1) {
+                        $minutes = "a minute"
+
+                    } else {
+                        $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minutes"
+                    }
                 } else {
-                    $minutes = "$([int]$lastUpdatedTimespan.TotalMinutes) minutes"
+                    $minutes = "$([int]$lastUpdatedTimespan.TotalHours) hours"
                 }
             }
 
@@ -555,7 +576,33 @@ function Enable-PIMRole {
 
     # Sort role names first, then place the tenant-wide assignment before any scoped assignments for that role.
     $sortedRoleStates = $roleStates | Sort-Object -Property RoleName, @{ Expression = { [int]($_.Scope -ne "Tenant") } }, Scope
-    $userSelections = $sortedRoleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
+    if (@($RoleName).Count -gt 0) {
+        $userSelections = @()
+        foreach ($requestedRoleName in $RoleName) {
+            $roleNameParts = $requestedRoleName -split ':', 2
+            $requestedDisplayName = $roleNameParts[0].Trim()
+            $requestedScope = if ($roleNameParts.Count -eq 2) { $roleNameParts[1].Trim() } else { "Tenant" }
+
+            if ([string]::IsNullOrWhiteSpace($requestedDisplayName) -or [string]::IsNullOrWhiteSpace($requestedScope)) {
+                Write-Warning "Skipping invalid role selection '$requestedRoleName'. Use 'RoleName' for tenant-wide roles or 'RoleName:Scope' for scoped roles."
+                continue
+            }
+
+            $matchingRoles = @($sortedRoleStates | Where-Object { $_.RoleName -ieq $requestedDisplayName -and $_.Scope -ieq $requestedScope })
+            if ($matchingRoles.Count -eq 0) {
+                Write-Warning "No eligible role assignment found for '$requestedRoleName'."
+                continue
+            }
+
+            $userSelections += $matchingRoles
+        }
+    } else {
+        $userSelections = $sortedRoleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
+    }
+
+    if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
+        throw "Duration must be greater than zero."
+    }
 
     # Let's ask for the required info upfront
     $justificationsHash = @{}
@@ -705,8 +752,23 @@ function Enable-PIMRole {
         # Coz we wouldn't have been able to disable them above to reactivate
         if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le $script:minimumActiveMinutes) { continue }
 
+        if ($PSBoundParameters.ContainsKey("Duration")) {
+            $maximumDuration = [System.Xml.XmlConvert]::ToTimeSpan($selection.More.More.MaxDuration)
+            if ($Duration -gt $maximumDuration) {
+                Write-Warning "Requested duration ($Duration) for '$($selection.RoleName)' [$($selection.Scope)] exceeds its PIM maximum ($($selection.MaxDuration)); activating for the maximum instead."
+                $activationDuration = $selection.More.More.MaxDuration
+                $activationDurationDisplay = $selection.MaxDuration
+            } else {
+                $activationDuration = [System.Xml.XmlConvert]::ToString($Duration)
+                $activationDurationDisplay = $Duration
+            }
+        } else {
+            $activationDuration = $selection.More.More.MaxDuration
+            $activationDurationDisplay = $selection.MaxDuration
+        }
+
         Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.RoleName), $($selection.Scope))
-        Write-Host "Enabling for $($selection.MaxDuration)"
+        Write-Host "Enabling for $activationDurationDisplay"
 
         $params = @{
             Action = "selfActivate"
@@ -718,7 +780,7 @@ function Enable-PIMRole {
                 StartDateTime = Get-Date
                 Expiration = @{
                     Type = "AfterDuration"
-                    Duration = $selection.More.More.MaxDuration
+                    Duration = $activationDuration
                 }
             }
         }
@@ -1083,6 +1145,14 @@ function Enable-PIMGroup {
 
         [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
         [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [string[]]$GroupName,
+
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [TimeSpan]$Duration,
+
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
         [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
@@ -1109,7 +1179,13 @@ function Enable-PIMGroup {
     Optional. If specified, it sets the ticketing system for group activations that need a ticket number. Otherwise, you are prompted; blank ticket-number input uses 12345, and blank ticket-system input uses Fresh.
 
     .PARAMETER RefreshEligibleGroups
-    Optional. By default, eligible groups are only checked if it's been more than 30 mins since the last invocation. If you want to check before that, use this switch.
+    Optional. By default, eligible groups are only checked if it's been more than 8 hours since the last invocation. If you want to check before that, use this switch.
+
+    .PARAMETER GroupName
+    Optional. The names of eligible groups to activate without displaying the selection TUI. When both Member and Owner assignments are eligible for a group, use the format 'GroupName:Member' or 'GroupName:Owner'.
+
+    .PARAMETER Duration
+    Optional. The duration for which to activate selected groups. If it exceeds a group's configured PIM maximum duration, that group is activated for its maximum duration and a warning is shown. If omitted, each group is activated for its maximum duration.
     #>
 
     Write-Host ""
@@ -1123,12 +1199,12 @@ function Enable-PIMGroup {
         "ErrorAction" = "Stop"
     }
 
-    if ($PSBoundParameters.ContainsKey("UseDeviceCode")) { $graphParams.UseDeviceCode = $true }
-    if ($PSBoundParameters.ContainsKey("TenantId")) { $graphParams.TenantId = $TenantId }
-    if ($PSBoundParameters.ContainsKey("ClientId")) { $graphParams.ClientId = $ClientId }
+    if ($UseDeviceCode) { $graphParams.UseDeviceCode = $true }
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $graphParams.TenantId = $TenantId }
+    if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $graphParams.ClientId = $ClientId }
 
-    # Disconnect the existing sessions if one of these were provided
-    if ($PSBoundParameters.ContainsKey("UseDeviceCode") -or $PSBoundParameters.ContainsKey("TenantId") -or $PSBoundParameters.ContainsKey("ClientId")) {
+    # Disconnect the existing sessions if custom connection settings were supplied directly or through PSDefaultParameterValues.
+    if ($UseDeviceCode -or -not [string]::IsNullOrWhiteSpace($TenantId) -or -not [string]::IsNullOrWhiteSpace($ClientId)) {
         try {
             Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
         } catch {}
@@ -1466,7 +1542,40 @@ function Enable-PIMGroup {
         return
     }
 
-    $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
+    if (@($GroupName).Count -gt 0) {
+        $userSelections = @()
+        foreach ($requestedGroupName in $GroupName) {
+            $groupNameParts = $requestedGroupName -split ':', 2
+            $requestedDisplayName = $groupNameParts[0].Trim()
+            $requestedType = if ($groupNameParts.Count -eq 2) { $groupNameParts[1].Trim() } else { $null }
+
+            if ([string]::IsNullOrWhiteSpace($requestedDisplayName) -or ($null -ne $requestedType -and [string]::IsNullOrWhiteSpace($requestedType))) {
+                Write-Warning "Skipping invalid group selection '$requestedGroupName'. Use 'GroupName', 'GroupName:Member', or 'GroupName:Owner'."
+                continue
+            }
+
+            $matchingGroups = @($groupStates | Where-Object { $_.GroupName -ieq $requestedDisplayName })
+            if ($null -ne $requestedType) {
+                $matchingGroups = @($matchingGroups | Where-Object { $_.Type -ieq $requestedType })
+            } elseif (@($matchingGroups.Type | Sort-Object -Unique).Count -gt 1) {
+                Write-Warning "Multiple eligible assignment types found for '$requestedGroupName'. Specify '$requestedGroupName:Member' or '$requestedGroupName:Owner'."
+                continue
+            }
+
+            if ($matchingGroups.Count -eq 0) {
+                Write-Warning "No eligible group assignment found for '$requestedGroupName'."
+                continue
+            }
+
+            $userSelections += $matchingGroups
+        }
+    } else {
+        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
+    }
+
+    if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
+        throw "Duration must be greater than zero."
+    }
 
     # Let's ask for the required info upfront
     $justificationsHash = @{}
@@ -1616,8 +1725,23 @@ function Enable-PIMGroup {
         # Coz we wouldn't have been able to disable them above to reactivate
         if ($selection.Status -ne "Inactive" -and $selection.More.More.ActiveMinutes -le $script:minimumActiveMinutes) { continue }
 
+        if ($PSBoundParameters.ContainsKey("Duration")) {
+            $maximumDuration = [System.Xml.XmlConvert]::ToTimeSpan($selection.More.More.MaxDuration)
+            if ($Duration -gt $maximumDuration) {
+                Write-Warning "Requested duration ($Duration) for '$($selection.GroupName)' [$($selection.Type)] exceeds its PIM maximum ($($selection.MaxDuration)); activating for the maximum instead."
+                $activationDuration = $selection.More.More.MaxDuration
+                $activationDurationDisplay = $selection.MaxDuration
+            } else {
+                $activationDuration = [System.Xml.XmlConvert]::ToString($Duration)
+                $activationDurationDisplay = $Duration
+            }
+        } else {
+            $activationDuration = $selection.More.More.MaxDuration
+            $activationDurationDisplay = $selection.MaxDuration
+        }
+
         Write-Host -NoNewline @colorParams ("👉 {0,-$longestRoleLength} [{1,-$longestScopeLength}] " -f $($selection.GroupName), $($selection.Type))
-        Write-Host "Enabling for $($selection.MaxDuration)"
+        Write-Host "Enabling for $activationDurationDisplay"
 
         $params = @{
             accessId = $selection.More.More.AccessId
@@ -1629,7 +1753,7 @@ function Enable-PIMGroup {
                 startDateTime = Get-Date
                 expiration = @{
                     type = "AfterDuration"
-                    duration = $selection.More.More.MaxDuration
+                    duration = $activationDuration
                 }
             }
         }

@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.17'
+    ModuleVersion = '0.0.19'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -54,6 +54,7 @@
     RequiredModules = @(
         "Microsoft.Graph.Authentication",
         "Microsoft.Graph.Identity.Governance",
+        "Microsoft.Graph.Identity.SignIns",
         "Microsoft.Graph.Users",
         "Microsoft.PowerShell.ConsoleGuiTools",
         "Microsoft.Graph.Identity.DirectoryManagement"
@@ -119,7 +120,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Sort scoped PIM roles by scope and role name before tenant-wide roles. Also show the group membership type. Added parameter sets to enforce a TenantId too if ClientId is provided.'
+            ReleaseNotes = 'Added direct role and group selection by name, including support for PowerShell default parameter values.'
     
             # Prerelease string of this module
             # Prerelease = ''
