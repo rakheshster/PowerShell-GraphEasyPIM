@@ -577,7 +577,8 @@ function Enable-PIMRole {
 
     # Sort role names first, then place the tenant-wide assignment before any scoped assignments for that role.
     $sortedRoleStates = $roleStates | Sort-Object -Property RoleName, @{ Expression = { [int]($_.Scope -ne "Tenant") } }, Scope
-    if (@($RoleName).Count -gt 0) {
+    # Only bypass the TUI when RoleName was explicitly supplied; processing variables can otherwise populate a same-named value.
+    if ($PSBoundParameters.ContainsKey("RoleName") -and @($RoleName).Count -gt 0) {
         $userSelections = @()
         foreach ($requestedRoleName in $RoleName) {
             $roleNameParts = $requestedRoleName -split ':', 2
@@ -1543,7 +1544,8 @@ function Enable-PIMGroup {
         return
     }
 
-    if (@($GroupName).Count -gt 0) {
+    # Only bypass the TUI when GroupName was explicitly supplied; processing variables can otherwise populate a same-named value.
+    if ($PSBoundParameters.ContainsKey("GroupName") -and @($GroupName).Count -gt 0) {
         $userSelections = @()
         foreach ($requestedGroupName in $GroupName) {
             $groupNameParts = $requestedGroupName -split ':', 2
