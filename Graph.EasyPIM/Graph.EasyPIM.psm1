@@ -34,8 +34,8 @@ $policyAssignmentHashGroupsOwner = @{}
 $policyAssignmentHashGroupsMember = @{}
 
 # Keep operational timing values together so cache behaviour and PIM status waits are easy to tune consistently.
-$roleCacheExpiryHours = 8
-$groupCacheExpiryHours = 8
+$roleCacheExpiryDays = 7
+$groupCacheExpiryDays = 7
 $minimumActiveMinutes = 5
 $requestStatusWaitSeconds = 20
 
@@ -117,7 +117,7 @@ function Enable-PIMRole {
     Optional. If specified, it sets the ticketing system for role activations that need a ticket number. Otherwise, you are prompted; blank ticket-number input uses 12345, and blank ticket-system input uses Fresh.
 
     .PARAMETER RefreshEligibleRoles
-    Optional. By default, eligible roles are only checked if it's been more than 8 hours since the last invocation. If you want to check before that, use this switch.
+    Optional. By default, eligible roles are only checked if it's been more than 7 days since the last invocation in this session. If you want to check before that, use this switch.
 
     .PARAMETER RoleName
     Optional. The names of eligible roles to activate without displaying the selection TUI. An unsuffixed name activates only the tenant-wide assignment. To activate a scoped assignment, use the format 'RoleName:Scope', where Scope exactly matches the value displayed in the TUI.
@@ -189,7 +189,7 @@ function Enable-PIMRole {
         if ($null -ne $lastUpdatedRoles) {
             $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdatedRoles -End $currentTime
 
-            if ($lastUpdatedTimespan.TotalHours -gt $script:roleCacheExpiryHours) {
+            if ($lastUpdatedTimespan.TotalDays -gt $script:roleCacheExpiryDays) {
                 $needsUpdating = $true
 
             } else {
@@ -217,7 +217,7 @@ function Enable-PIMRole {
     try {
         if ($needsUpdating) {
             Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID roles. This could take a few minutes."
-            Write-Host @colorParams "💾 Eligible roles and their settings will be cached for $($script:roleCacheExpiryHours) hours."
+            Write-Host @colorParams "💾 Eligible roles and their settings will be cached for $($script:roleCacheExpiryDays) days in this session."
 
             Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
             [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
@@ -1181,7 +1181,7 @@ function Enable-PIMGroup {
     Optional. If specified, it sets the ticketing system for group activations that need a ticket number. Otherwise, you are prompted; blank ticket-number input uses 12345, and blank ticket-system input uses Fresh.
 
     .PARAMETER RefreshEligibleGroups
-    Optional. By default, eligible groups are only checked if it's been more than 8 hours since the last invocation. If you want to check before that, use this switch.
+    Optional. By default, eligible groups are only checked if it's been more than 7 days since the last invocation in this session. If you want to check before that, use this switch.
 
     .PARAMETER GroupName
     Optional. The names of eligible groups to activate without displaying the selection TUI. When both Member and Owner assignments are eligible for a group, use the format 'GroupName:Member' or 'GroupName:Owner'.
@@ -1244,7 +1244,7 @@ function Enable-PIMGroup {
         if ($null -ne $lastUpdatedGroups) {
             $lastUpdatedTimespan = New-TimeSpan -Start $lastUpdatedGroups -End $currentTime
 
-            if ($lastUpdatedTimespan.TotalHours -gt $script:groupCacheExpiryHours) {
+            if ($lastUpdatedTimespan.TotalDays -gt $script:groupCacheExpiryDays) {
                 $needsUpdating = $true
 
             } else {
@@ -1273,6 +1273,7 @@ function Enable-PIMGroup {
     try {
         if ($needsUpdating) {
             Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID groups. This might take a few minutes."
+            Write-Host @colorParams "💾 Eligible groups and their settings will be cached for $($script:groupCacheExpiryDays) days in this session."
 
             Write-Progress -Activity "Fetching all eligible Entra ID groups" -Id 0
             [array]$myEligibleGroups = Get-MgIdentityGovernancePrivilegedAccessGroupEligibilitySchedule -All -Filter "principalId eq '$userId'" -ExpandProperty Group -ErrorAction Stop

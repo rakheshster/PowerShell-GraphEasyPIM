@@ -4,6 +4,16 @@ All notable changes to Graph.EasyPIM are documented here in reverse chronologica
 
 > ℹ️ This changelog was reconstructed from the Git history available in this repository. The earliest available commit already contains version `0.0.16`, so changes from earlier versions are not represented here.
 
+## [0.0.20] - 2026-09-23
+
+### Changed
+
+- Extended the eligible role and group cache from 8 hours to 7 days within the current PowerShell session.
+
+### Fixed
+
+- Restored the selection TUI for `Enable-PIMRole` and `Enable-PIMGroup` when no named selection parameter is supplied.
+
 ## [0.0.19] - 2026-09-23
 
 ### Added

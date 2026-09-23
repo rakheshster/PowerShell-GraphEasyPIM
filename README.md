@@ -31,15 +31,40 @@ Tested on Windows, macOS, and Linux with PowerShell 7.4. It currently has the fo
 Pass `-RoleName` or `-GroupName` to activate known eligible assignments directly. When `-RoleName` is unsuffixed it selects only the tenant-wide role assignment. Use `RoleName:Scope` for a scoped role, where the scope exactly matches the value displayed by the TUI.
 
 ```powershell
-Enable-PIMRole -ClientId '11111111-1111-1111-1111-111111111111' -TenantId '22222222-2222-2222-2222-222222222222' -RoleName 'User Administrator', 'Groups Administrator'
+$enablePimRoleParams = @{
+    ClientId = '11111111-1111-1111-1111-111111111111'
+    TenantId = '22222222-2222-2222-2222-222222222222'
+    RoleName = @(
+        'User Administrator'
+        'Groups Administrator'
+    )
+}
 
-Enable-PIMRole -ClientId '11111111-1111-1111-1111-111111111111' -TenantId '22222222-2222-2222-2222-222222222222' -RoleName 'User Administrator:Finance (Admin Unit)'
+Enable-PIMRole @enablePimRoleParams
+```
+
+For a scoped role, include the scope in the role name:
+
+```powershell
+$enablePimRoleParams = @{
+    ClientId = '11111111-1111-1111-1111-111111111111'
+    TenantId = '22222222-2222-2222-2222-222222222222'
+    RoleName = 'User Administrator:Finance (Admin Unit)'
+}
+
+Enable-PIMRole @enablePimRoleParams
 ```
 
 For groups, specify `:Member` or `:Owner` when the same group has eligible assignments of both types. An unsuffixed group name is accepted only when it has a single eligible assignment type.
 
 ```powershell
-Enable-PIMGroup -ClientId '11111111-1111-1111-1111-111111111111' -TenantId '22222222-2222-2222-2222-222222222222' -GroupName 'Contoso - Privileged Access:Member'
+$enablePimGroupParams = @{
+    ClientId = '11111111-1111-1111-1111-111111111111'
+    TenantId = '22222222-2222-2222-2222-222222222222'
+    GroupName = 'Contoso - Privileged Access:Member'
+}
+
+Enable-PIMGroup @enablePimGroupParams
 ```
 
 PowerShell's `$PSDefaultParameterValues` preference hashtable can supply parameter values for each command. Add the following to your PowerShell profile to default the custom application details and activate named tenant-wide roles without the TUI:
@@ -63,7 +88,7 @@ Enable-PIMRole -RoleName @()
 
 ## Good to know
 - The first time you run one of these cmdlets it will open up a browser window to authenticate. But if you are already connected to Graph, this might not happen and the cmdlets may not work. Do a `Disconnect-MgGraph` and then try the cmdlets again. 
-- The lists of eligible PIM roles and groups are cached for 8 hours. Run `Enable-PIMRole -RefreshEligibleRoles` or `Enable-PIMGroup -RefreshEligibleGroups` to force a refresh.
+- The lists of eligible PIM roles and groups are cached for 7 days within the current PowerShell session. Run `Enable-PIMRole -RefreshEligibleRoles` or `Enable-PIMGroup -RefreshEligibleGroups` to force a refresh.
 - You might need to involve a Global Admin to do some consents on the `Microsoft Graph Command Line Tools` service principal. To do an admin consent on behalf of the organization, a Global Admin is required; but an Application Admin can do consent for themselves. 
     - This URL should help: `https://login.microsoftonline.com/{tenantId}/v2.0/adminconsent?client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e&scope=RoleEligibilitySchedule.Read.Directory RoleEligibilitySchedule.ReadWrite.Directory RoleManagement.Read.Directory RoleManagement.Read.All RoleManagement.ReadWrite.Directory RoleAssignmentSchedule.ReadWrite.Directory RoleAssignmentSchedule.Remove.Directory PrivilegedEligibilitySchedule.Read.AzureADGroup PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup PrivilegedAccess.Read.AzureADGroup PrivilegedAccess.ReadWrite.AzureADGroup RoleManagementPolicy.Read.AzureADGroup`
     - Of course, replace `{tenantId}` above.
@@ -79,14 +104,31 @@ This modules depends upon the following.
 - `Microsoft.Graph.Users`
 - `Microsoft.Graph.Identity.DirectoryManagement`
 
-```
-Install-Module "Microsoft.Graph.Authentication", "Microsoft.Graph.Identity.Governance", "Microsoft.Graph.Identity.SignIns", "Microsoft.Graph.Users", "Microsoft.Graph.Identity.DirectoryManagement", "Microsoft.PowerShell.ConsoleGuiTools"
+```powershell
+$moduleNames = @(
+    'Microsoft.Graph.Authentication'
+    'Microsoft.Graph.Identity.Governance'
+    'Microsoft.Graph.Identity.SignIns'
+    'Microsoft.Graph.Users'
+    'Microsoft.Graph.Identity.DirectoryManagement'
+    'Microsoft.PowerShell.ConsoleGuiTools'
+)
+
+Install-Module -Name $moduleNames
 ```
 
 The Microsoft Graph PowerShell workload modules should be kept on matching versions because each module has a version-specific dependency on `Microsoft.Graph.Authentication`. If Graph.EasyPIM fails to import after an update, update all its Graph prerequisites together:
 
 ```powershell
-Update-Module "Microsoft.Graph.Authentication", "Microsoft.Graph.Identity.Governance", "Microsoft.Graph.Identity.SignIns", "Microsoft.Graph.Users", "Microsoft.Graph.Identity.DirectoryManagement"
+$graphModuleNames = @(
+    'Microsoft.Graph.Authentication'
+    'Microsoft.Graph.Identity.Governance'
+    'Microsoft.Graph.Identity.SignIns'
+    'Microsoft.Graph.Users'
+    'Microsoft.Graph.Identity.DirectoryManagement'
+)
+
+Update-Module -Name $graphModuleNames
 ```
 
 If it weren't for these, this module wouldn't exist! Thank you 😍 to the creators of these, especially `Microsoft.PowerShell.ConsoleGuiTools` which is what I use to drive things. 🙏
