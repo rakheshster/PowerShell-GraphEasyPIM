@@ -217,6 +217,7 @@ function Enable-PIMRole {
     try {
         if ($needsUpdating) {
             Write-Host @colorParams "🥷 Fetching all eligible & active Entra ID roles. This could take a few minutes."
+            Write-Host @colorParams "💾 Eligible roles and their settings will be cached for $($script:roleCacheExpiryHours) hours."
 
             Write-Progress -Activity "Fetching all eligible Entra ID roles" -Id 0
             [array]$myEligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
@@ -349,16 +350,16 @@ function Enable-PIMRole {
         $percentageComplete = ($counter/$totalCount)*100
 
         $roleDefinitionId = $roleObj.RoleDefinitionId
-        $roleName = $roleObj.RoleDefinition.DisplayName
+        $roleDisplayName = $roleObj.RoleDefinition.DisplayName
         $roleDirectoryScopeId = $roleObj.DirectoryScopeId
 
-        $roleDefinitionsCache[$roleDefinitionId] = $roleName
+        $roleDefinitionsCache[$roleDefinitionId] = $roleDisplayName
 
         $timespanArray = @()
         $roleExpired = $false
         $roleAssignmentType = "Inactive"
 
-        Write-Progress -Activity "Processing role '$roleName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+        Write-Progress -Activity "Processing role '$roleDisplayName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
         $activeRoleObj = $null
         $activeRoleObj = $myActiveRoles | Where-Object { $_.RoleDefinitionId -eq "$roleDefinitionId" -and $_.DirectoryScopeId -eq "$roleDirectoryScopeId" }
@@ -422,12 +423,12 @@ function Enable-PIMRole {
         <#
         $roleDirectoryScopeId = $roleObj.DirectoryScopeId
 
-        Write-Progress -Activity "Fetching policy assignment of role '$roleName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+        Write-Progress -Activity "Fetching policy assignment of role '$roleDisplayName'" -Id 2 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
         try {
             $policyAssignment = Get-MgPolicyRoleManagementPolicyAssignment -All -Filter "scopeId eq '$roleDirectoryScopeId' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '$roleDefinitionId'" -ErrorAction Stop
 
         } catch {
-            Write-Warning "Error fetching policy assignments for '$roleName': $($_.Exception.Message)"
+            Write-Warning "Error fetching policy assignments for '$roleDisplayName': $($_.Exception.Message)"
             continue
         }
         #>
@@ -539,7 +540,7 @@ function Enable-PIMRole {
         Write-Progress -Completed -Id 1
 
         [pscustomobject][ordered]@{
-            "RoleName" = $roleName
+            "RoleName" = $roleDisplayName
             "Status" = $roleAssignmentType
             "ExpiresIn" = if (!($roleExpired)) {
                 # Take only the topmost entry (day or hour in case of more than one)
@@ -1384,8 +1385,8 @@ function Enable-PIMGroup {
         $percentageComplete = ($counter/$totalCount)*100
 
         $groupId = $groupRoleObj.GroupId
-        $groupName = $groupRoleObj.Group.DisplayName
-        $groupNamesCache[$groupId] = $groupName
+        $groupDisplayName = $groupRoleObj.Group.DisplayName
+        $groupNamesCache[$groupId] = $groupDisplayName
 
         $accessId = $groupRoleObj.AccessId
 
@@ -1393,7 +1394,7 @@ function Enable-PIMGroup {
         $groupRoleExpired = $false
         $groupRoleAssignmentType = "Inactive"
 
-        Write-Progress -Activity "Processing group '$groupName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
+        Write-Progress -Activity "Processing group '$groupDisplayName'" -Id 0 -PercentComplete $percentageComplete -Status "$counter/$totalCount"
 
         $activeGroupRoleObj = $null
         $activeGroupRoleObj = $myActiveGroups | Where-Object { $_.GroupId -eq "$groupId" -and $_.AccessId -eq "$accessId" }
@@ -1508,7 +1509,7 @@ function Enable-PIMGroup {
         Write-Progress -Completed -Id 1
 
         [pscustomobject][ordered]@{
-            "GroupName" = $groupName
+            "GroupName" = $groupDisplayName
             "Status" = $groupRoleAssignmentType
             "Type" = if ($accessId -eq "member") { "Member" } else { "Owner" }
             "ExpiresIn" = if (!($groupRoleExpired)) {
