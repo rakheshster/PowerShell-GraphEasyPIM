@@ -78,15 +78,15 @@ function Write-EasyPIMSelectionTip {
     $commandParts.Add($CommandName)
 
     if ($IncludeActivationParameters) {
-        if ($BoundParameters.Contains("SkipJustification")) { $commandParts.Add("-SkipJustification") }
-        if ($BoundParameters.Contains("Justification")) { $commandParts.Add("-Justification '{0}'" -f $BoundParameters["Justification"].Replace("'", "''")) }
-        if ($BoundParameters.Contains("TicketingSystem")) { $commandParts.Add("-TicketingSystem '{0}'" -f $BoundParameters["TicketingSystem"].Replace("'", "''")) }
-        if ($BoundParameters.Contains("Duration")) { $commandParts.Add("-Duration (New-TimeSpan -Ticks {0})" -f $BoundParameters["Duration"].Ticks) }
+        if ($BoundParameters.Keys -contains "SkipJustification") { $commandParts.Add("-SkipJustification") }
+        if ($BoundParameters.Keys -contains "Justification") { $commandParts.Add("-Justification '{0}'" -f $BoundParameters["Justification"].Replace("'", "''")) }
+        if ($BoundParameters.Keys -contains "TicketingSystem") { $commandParts.Add("-TicketingSystem '{0}'" -f $BoundParameters["TicketingSystem"].Replace("'", "''")) }
+        if ($BoundParameters.Keys -contains "Duration") { $commandParts.Add("-Duration (New-TimeSpan -Ticks {0})" -f $BoundParameters["Duration"].Ticks) }
     }
 
-    if ($BoundParameters.Contains("UseDeviceCode")) { $commandParts.Add("-UseDeviceCode") }
-    if ($BoundParameters.Contains("TenantId")) { $commandParts.Add("-TenantId '{0}'" -f $BoundParameters["TenantId"].Replace("'", "''")) }
-    if ($BoundParameters.Contains("ClientId")) { $commandParts.Add("-ClientId '{0}'" -f $BoundParameters["ClientId"].Replace("'", "''")) }
+    if ($BoundParameters.Keys -contains "UseDeviceCode") { $commandParts.Add("-UseDeviceCode") }
+    if ($BoundParameters.Keys -contains "TenantId") { $commandParts.Add("-TenantId '{0}'" -f $BoundParameters["TenantId"].Replace("'", "''")) }
+    if ($BoundParameters.Keys -contains "ClientId") { $commandParts.Add("-ClientId '{0}'" -f $BoundParameters["ClientId"].Replace("'", "''")) }
 
     $quotedSelectionValues = $SelectionValues | ForEach-Object { "'{0}'" -f $_.Replace("'", "''") }
     $commandParts.Add(("-{0} {1}" -f $SelectionParameterName, ($quotedSelectionValues -join ',')))

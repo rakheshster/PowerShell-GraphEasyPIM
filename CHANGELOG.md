@@ -1,8 +1,12 @@
 # Changelog
 
-All notable changes to Graph.EasyPIM are documented here in reverse chronological order.
+All notable changes are documented here in reverse chronological order.
 
-> ℹ️ This changelog was reconstructed from the Git history available in this repository. The earliest available commit already contains version `0.0.16`, so changes from earlier versions are not represented here.
+## [0.0.22] - 2026-09-24
+
+### Fixed
+
+- Fixed TUI selection tips throwing bound-parameter `Contains` overload errors after selecting items.
 
 ## [0.0.21] - 2026-09-24
 

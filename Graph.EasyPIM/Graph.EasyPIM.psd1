@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.21'
+    ModuleVersion = '0.0.22'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -120,7 +120,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Added direct role and group selection by name, including support for PowerShell default parameter values.'
+            ReleaseNotes = 'Fixed TUI selection tips throwing bound-parameter Contains overload errors.'
     
             # Prerelease string of this module
             # Prerelease = ''
