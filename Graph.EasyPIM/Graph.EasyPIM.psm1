@@ -61,6 +61,41 @@ function Test-EasyPIMUpdate {
     }
 }
 
+function Write-EasyPIMSelectionTip {
+    param(
+        [string]$CommandName,
+        [string]$SelectionParameterName,
+        [string[]]$SelectionValues,
+        [System.Collections.IDictionary]$BoundParameters,
+        [switch]$IncludeActivationParameters
+    )
+
+    if (@($SelectionValues).Count -eq 0) {
+        return
+    }
+
+    $commandParts = [System.Collections.Generic.List[string]]::new()
+    $commandParts.Add($CommandName)
+
+    if ($IncludeActivationParameters) {
+        if ($BoundParameters.Contains("SkipJustification")) { $commandParts.Add("-SkipJustification") }
+        if ($BoundParameters.Contains("Justification")) { $commandParts.Add("-Justification '{0}'" -f $BoundParameters["Justification"].Replace("'", "''")) }
+        if ($BoundParameters.Contains("TicketingSystem")) { $commandParts.Add("-TicketingSystem '{0}'" -f $BoundParameters["TicketingSystem"].Replace("'", "''")) }
+        if ($BoundParameters.Contains("Duration")) { $commandParts.Add("-Duration (New-TimeSpan -Ticks {0})" -f $BoundParameters["Duration"].Ticks) }
+    }
+
+    if ($BoundParameters.Contains("UseDeviceCode")) { $commandParts.Add("-UseDeviceCode") }
+    if ($BoundParameters.Contains("TenantId")) { $commandParts.Add("-TenantId '{0}'" -f $BoundParameters["TenantId"].Replace("'", "''")) }
+    if ($BoundParameters.Contains("ClientId")) { $commandParts.Add("-ClientId '{0}'" -f $BoundParameters["ClientId"].Replace("'", "''")) }
+
+    $quotedSelectionValues = $SelectionValues | ForEach-Object { "'{0}'" -f $_.Replace("'", "''") }
+    $commandParts.Add(("-{0} {1}" -f $SelectionParameterName, ($quotedSelectionValues -join ',')))
+
+    Write-Host @script:colorParams "💡 TIP: You can directly select these items next time:"
+    Write-Host ($commandParts -join ' ')
+    Write-Host ""
+}
+
 function Enable-PIMRole {
     param(
         [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
@@ -600,6 +635,8 @@ function Enable-PIMRole {
         }
     } else {
         $userSelections = $sortedRoleStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM roles (count: $totalCount)"
+        $selectionValues = $userSelections | ForEach-Object { if ($_.Scope -eq "Tenant") { $_.RoleName } else { "$($_.RoleName):$($_.Scope)" } }
+        Write-EasyPIMSelectionTip -CommandName "Enable-PIMRole" -SelectionParameterName "RoleName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters -IncludeActivationParameters
     }
 
     if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
@@ -857,6 +894,10 @@ function Disable-PIMRole {
     param(
         [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
         [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [string[]]$RoleName,
+
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
         [switch]$UseDeviceCode,
 
         [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
@@ -868,6 +909,9 @@ function Disable-PIMRole {
     )
 
     <#
+    .PARAMETER RoleName
+    Optional. The names of active roles to disable without displaying the selection TUI. An unsuffixed name disables only the tenant-wide assignment. To disable a scoped assignment, use the format 'RoleName:Scope', where Scope exactly matches the value displayed in the TUI.
+
     .PARAMETER UseDeviceCode
     Optional. Use Device Code authentication.
 
@@ -1058,7 +1102,31 @@ function Disable-PIMRole {
         return
     }
 
-    $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
+    if ($PSBoundParameters.ContainsKey("RoleName") -and @($RoleName).Count -gt 0) {
+        $userSelections = @()
+        foreach ($requestedRoleName in $RoleName) {
+            $roleNameParts = $requestedRoleName -split ':', 2
+            $requestedDisplayName = $roleNameParts[0].Trim()
+            $requestedScope = if ($roleNameParts.Count -eq 2) { $roleNameParts[1].Trim() } else { "Tenant" }
+
+            if ([string]::IsNullOrWhiteSpace($requestedDisplayName) -or [string]::IsNullOrWhiteSpace($requestedScope)) {
+                Write-Warning "Skipping invalid role selection '$requestedRoleName'. Use 'RoleName' for tenant-wide roles or 'RoleName:Scope' for scoped roles."
+                continue
+            }
+
+            $matchingRoles = @($roleStates | Where-Object { $_.RoleName -ieq $requestedDisplayName -and $_.Scope -ieq $requestedScope })
+            if ($matchingRoles.Count -eq 0) {
+                Write-Warning "No active role assignment found for '$requestedRoleName'."
+                continue
+            }
+
+            $userSelections += $matchingRoles
+        }
+    } else {
+        $userSelections = $roleStates | Out-ConsoleGridView -Title "List of active Entra ID PIM roles"
+        $selectionValues = $userSelections | ForEach-Object { if ($_.Scope -eq "Tenant") { $_.RoleName } else { "$($_.RoleName):$($_.Scope)" } }
+        Write-EasyPIMSelectionTip -CommandName "Disable-PIMRole" -SelectionParameterName "RoleName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters
+    }
 
     # I use this for tidying up some of the output later; find the longest entry in the selections
     $longestRoleLength = ($userSelections.RoleName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length
@@ -1575,6 +1643,14 @@ function Enable-PIMGroup {
         }
     } else {
         $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active & eligible Entra ID PIM groups (count: $totalCount)"
+        $selectionValues = foreach ($selection in $userSelections) {
+            if (@($groupStates | Where-Object { $_.GroupName -ieq $selection.GroupName }).Count -gt 1) {
+                "$($selection.GroupName):$($selection.Type)"
+            } else {
+                $selection.GroupName
+            }
+        }
+        Write-EasyPIMSelectionTip -CommandName "Enable-PIMGroup" -SelectionParameterName "GroupName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters -IncludeActivationParameters
     }
 
     if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
@@ -1824,6 +1900,10 @@ function Enable-PIMGroup {
 # It's very simple compared to Enable-PIMRole
 function Disable-PIMGroup {
     param(
+        [Parameter(Mandatory=$false, ParameterSetName = 'CustomApp')]
+        [Parameter(Mandatory=$false, ParameterSetName = 'User')]
+        [string[]]$GroupName,
+
         [switch]$UseDeviceCode,
 
         [Parameter(Mandatory=$true, ParameterSetName = 'CustomApp')]
@@ -1835,6 +1915,9 @@ function Disable-PIMGroup {
     )
 
     <#
+    .PARAMETER GroupName
+    Optional. The names of active groups to disable without displaying the selection TUI. When both Member and Owner assignments are active for a group, use the format 'GroupName:Member' or 'GroupName:Owner'.
+
     .PARAMETER UseDeviceCode
     Optional. Use Device Code authentication.
 
@@ -2009,7 +2092,44 @@ function Disable-PIMGroup {
         return
     }
 
-    $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active Entra ID PIM groups (count: $totalCount)"
+    if ($PSBoundParameters.ContainsKey("GroupName") -and @($GroupName).Count -gt 0) {
+        $userSelections = @()
+        foreach ($requestedGroupName in $GroupName) {
+            $groupNameParts = $requestedGroupName -split ':', 2
+            $requestedDisplayName = $groupNameParts[0].Trim()
+            $requestedType = if ($groupNameParts.Count -eq 2) { $groupNameParts[1].Trim() } else { $null }
+
+            if ([string]::IsNullOrWhiteSpace($requestedDisplayName) -or ($null -ne $requestedType -and [string]::IsNullOrWhiteSpace($requestedType))) {
+                Write-Warning "Skipping invalid group selection '$requestedGroupName'. Use 'GroupName', 'GroupName:Member', or 'GroupName:Owner'."
+                continue
+            }
+
+            $matchingGroups = @($groupStates | Where-Object { $_.GroupName -ieq $requestedDisplayName })
+            if ($null -ne $requestedType) {
+                $matchingGroups = @($matchingGroups | Where-Object { $_.Type -ieq $requestedType })
+            } elseif (@($matchingGroups.Type | Sort-Object -Unique).Count -gt 1) {
+                Write-Warning "Multiple active assignment types found for '$requestedGroupName'. Specify '$requestedGroupName:Member' or '$requestedGroupName:Owner'."
+                continue
+            }
+
+            if ($matchingGroups.Count -eq 0) {
+                Write-Warning "No active group assignment found for '$requestedGroupName'."
+                continue
+            }
+
+            $userSelections += $matchingGroups
+        }
+    } else {
+        $userSelections = $groupStates | Out-ConsoleGridView -Title "List of active Entra ID PIM groups (count: $totalCount)"
+        $selectionValues = foreach ($selection in $userSelections) {
+            if (@($groupStates | Where-Object { $_.GroupName -ieq $selection.GroupName }).Count -gt 1) {
+                "$($selection.GroupName):$($selection.Type)"
+            } else {
+                $selection.GroupName
+            }
+        }
+        Write-EasyPIMSelectionTip -CommandName "Disable-PIMGroup" -SelectionParameterName "GroupName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters
+    }
 
     # I use this for tidying up some of the output later; find the longest entry in the selections
     $longestRoleLength = ($userSelections.GroupName | Sort-Object -Property { $_.Length } -Descending | Select-Object -First 1).Length

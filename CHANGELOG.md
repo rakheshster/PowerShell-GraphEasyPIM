@@ -4,6 +4,15 @@ All notable changes to Graph.EasyPIM are documented here in reverse chronologica
 
 > ℹ️ This changelog was reconstructed from the Git history available in this repository. The earliest available commit already contains version `0.0.16`, so changes from earlier versions are not represented here.
 
+## [0.0.21] - 2026-09-24
+
+### Added
+
+- Added copy/pasteable TUI selection tips to `Enable-PIMRole`, `Enable-PIMGroup`, `Disable-PIMRole`, and `Disable-PIMGroup`.
+  - `Enable-*` tip cmdlets retain explicitly supplied activation and Graph connection parameters, and generate direct `-RoleName` or `-GroupName` selections.
+  - `Disable-*` tip cmdlets generate direct selections. 
+  - `Disable-PIMRole` and `Disable-PIMGroup` now support `-RoleName` and `-GroupName` respectively to bypass the TUI.
+
 ## [0.0.20] - 2026-09-23
 
 ### Changed

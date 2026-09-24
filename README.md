@@ -57,6 +57,8 @@ Enable-PIMRole @enablePimRoleParams
 
 For groups, specify `:Member` or `:Owner` when the same group has eligible assignments of both types. An unsuffixed group name is accepted only when it has a single eligible assignment type.
 
+After making a TUI selection, EasyPIM displays a `💡 TIP:` with a copy/pasteable command that selects the same roles or groups directly next time. The tip carries forward applicable parameters that were explicitly supplied, including custom Graph application details, device-code authentication, justification, ticketing system, and requested duration.
+
 ```powershell
 $enablePimGroupParams = @{
     ClientId = '11111111-1111-1111-1111-111111111111'
@@ -65,6 +67,15 @@ $enablePimGroupParams = @{
 }
 
 Enable-PIMGroup @enablePimGroupParams
+```
+
+## Disabling named roles and groups without the TUI
+
+`Disable-PIMRole` also accepts `-RoleName`, using the same tenant and scoped `RoleName:Scope` format as activation. `Disable-PIMGroup` accepts `-GroupName`; use `GroupName:Member` or `GroupName:Owner` when both active assignment types exist. Both commands are emitted in the TUI selection tip.
+
+```powershell
+Disable-PIMRole -RoleName 'User Administrator:Finance (Admin Unit)'
+Disable-PIMGroup -GroupName 'Contoso - Privileged Access:Member'
 ```
 
 PowerShell's `$PSDefaultParameterValues` preference hashtable can supply parameter values for each command. Add the following to your PowerShell profile to default the custom application details and activate named tenant-wide roles without the TUI:
