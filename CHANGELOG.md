@@ -2,6 +2,19 @@
 
 All notable changes are documented here in reverse chronological order.
 
+## [0.0.24] - 2026-10-02
+
+### Fixed
+
+- Role-fetching errors from `Enable-PIMRole` and `Disable-PIMRole` now include the underlying Microsoft Graph error message.
+- Cancelling the selection TUI now exits cleanly without attempting to process an empty role or group selection or generate a malformed direct-selection tip.
+
+## [0.0.23] - 2026-10-02
+
+### Fixed
+
+- Cancelling the selection TUI now exits cleanly without attempting to process an empty role or group selection.
+
 ## [0.0.22] - 2026-09-24
 
 ### Fixed

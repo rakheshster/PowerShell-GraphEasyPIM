@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.22'
+    ModuleVersion = '0.0.24'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -120,7 +120,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = 'Fixed TUI selection tips throwing bound-parameter Contains overload errors.'
+            ReleaseNotes = '0.0.24 - Role-fetching errors now include the underlying Microsoft Graph error message; cancelled PIM selections exit cleanly without generating malformed direct-selection tips.'
     
             # Prerelease string of this module
             # Prerelease = ''

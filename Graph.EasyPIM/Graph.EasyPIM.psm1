@@ -70,7 +70,9 @@ function Write-EasyPIMSelectionTip {
         [switch]$IncludeActivationParameters
     )
 
-    if (@($SelectionValues).Count -eq 0) {
+    $SelectionValues = @($SelectionValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    if ($SelectionValues.Count -eq 0) {
         return
     }
 
@@ -268,7 +270,7 @@ function Enable-PIMRole {
         [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
 
     } catch {
-        throw [System.Management.Automation.RuntimeException]::new("Failed to fetch Entra ID roles.", $_.Exception)
+        throw [System.Management.Automation.RuntimeException]::new("Failed to fetch Entra ID roles: $($_.Exception.Message)", $_.Exception)
     }
 
     Write-Progress -Id 0 -Completed
@@ -639,6 +641,11 @@ function Enable-PIMRole {
         Write-EasyPIMSelectionTip -CommandName "Enable-PIMRole" -SelectionParameterName "RoleName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters -IncludeActivationParameters
     }
 
+    if (@($userSelections).Count -eq 0) {
+        Write-Host @colorParams "No roles selected; no changes made."
+        return
+    }
+
     if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
         throw "Duration must be greater than zero."
     }
@@ -972,7 +979,7 @@ function Disable-PIMRole {
         [array]$myActiveRoles = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -ExpandProperty RoleDefinition -All -Filter "principalId eq '$userId'" -ErrorAction Stop
 
     } catch {
-        throw [System.Management.Automation.RuntimeException]::new("Failed to fetch Entra ID roles.", $_.Exception)
+        throw [System.Management.Automation.RuntimeException]::new("Failed to fetch Entra ID roles: $($_.Exception.Message)", $_.Exception)
     }
 
     Write-Progress -Id 0 -Completed
@@ -1651,6 +1658,11 @@ function Enable-PIMGroup {
             }
         }
         Write-EasyPIMSelectionTip -CommandName "Enable-PIMGroup" -SelectionParameterName "GroupName" -SelectionValues $selectionValues -BoundParameters $PSBoundParameters -IncludeActivationParameters
+    }
+
+    if (@($userSelections).Count -eq 0) {
+        Write-Host @colorParams "No groups selected; no changes made."
+        return
     }
 
     if ($PSBoundParameters.ContainsKey("Duration") -and $Duration -le [TimeSpan]::Zero) {
