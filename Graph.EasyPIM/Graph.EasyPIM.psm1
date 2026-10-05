@@ -15,11 +15,11 @@ $requiredScopesArray = $requiredScopesArrayRoles + $requiredScopesArrayGroups
 ## The colors I will be using with Write-Host. Initially I was going to hardcode Yellow to match Write-Verbose, but then I thought what if the user has a different color scheme?
 ## Thanks https://www.pdq.com/blog/change-powershell-colors/ for showing me where to get these colors
 $colorParams = @{}
-if ($host.PrivateData.VerboseForegroundColor -ne "-1") {
+if ($host.PrivateData.VerboseForegroundColor -is [System.ConsoleColor]) {
     $colorParams.ForegroundColor = $host.PrivateData.VerboseForegroundColor
 }
 
-if ($host.PrivateData.VerboseBackgroundColor -ne "-1") {
+if ($host.PrivateData.VerboseBackgroundColor -is [System.ConsoleColor]) {
     $colorParams.BackgroundColor = $host.PrivateData.VerboseBackgroundColor
 }
 

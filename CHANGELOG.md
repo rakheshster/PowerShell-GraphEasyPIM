@@ -2,6 +2,12 @@
 
 All notable changes are documented here in reverse chronological order.
 
+## [0.0.25] - 2026-10-02
+
+### Fixed
+
+- Status output now falls back to the host default colours when a PowerShell host does not expose valid verbose foreground or background colours.
+
 ## [0.0.24] - 2026-10-02
 
 ### Fixed

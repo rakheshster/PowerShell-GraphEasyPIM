@@ -12,7 +12,7 @@
     RootModule = 'Graph.EasyPIM.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.0.24'
+    ModuleVersion = '0.0.25'
     
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -120,7 +120,7 @@
             # IconUri = ''
     
             # ReleaseNotes of this module
-            ReleaseNotes = '0.0.24 - Role-fetching errors now include the underlying Microsoft Graph error message; cancelled PIM selections exit cleanly without generating malformed direct-selection tips.'
+            ReleaseNotes = '0.0.25 - Status output now falls back to the host default colours when the host does not expose valid verbose foreground or background colours.'
     
             # Prerelease string of this module
             # Prerelease = ''
